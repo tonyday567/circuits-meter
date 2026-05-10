@@ -19,12 +19,13 @@ module Circuit.Perf
 
     -- * Warmup
     warmup,
-  ) where
+  )
+where
 
 import Control.DeepSeq (NFData, rnf)
 import Control.Exception (evaluate)
-import Control.Monad (void)
-import System.Clock (getTime, toNanoSecs, Clock (MonotonicRaw))
+import Control.Monad (replicateM_, void)
+import System.Clock (Clock (MonotonicRaw), getTime, toNanoSecs)
 
 -- | Nanoseconds as an integral count.
 type Nanos = Integer
@@ -40,7 +41,7 @@ nanos = toNanoSecs <$> getTime MonotonicRaw
 -- @
 -- (delta, result) <- once f a
 -- @
-once :: NFData b => (a -> b) -> a -> IO (Nanos, b)
+once :: (NFData b) => (a -> b) -> a -> IO (Nanos, b)
 once f a = do
   !t0 <- nanos
   let result = f a
@@ -50,13 +51,13 @@ once f a = do
 {-# INLINE once #-}
 
 -- | Measure a single call, discarding the result.
-once_ :: NFData b => (a -> b) -> a -> IO Nanos
+once_ :: (NFData b) => (a -> b) -> a -> IO Nanos
 once_ f a = fst <$> once f a
 {-# INLINE once_ #-}
 
 -- | Measure @f a@ repeated @n@ times. Returns per-run timings and the
 -- last result. Forces each result to NF.
-times :: NFData b => Int -> (a -> b) -> a -> IO ([Nanos], b)
+times :: (NFData b) => Int -> (a -> b) -> a -> IO ([Nanos], b)
 times n f a = do
   warmup 100
   go n []
@@ -70,12 +71,12 @@ times n f a = do
 {-# INLINE times #-}
 
 -- | Measure @f a@ repeated @n@ times, discarding results. Returns per-run timings.
-times_ :: NFData b => Int -> (a -> b) -> a -> IO [Nanos]
+times_ :: (NFData b) => Int -> (a -> b) -> a -> IO [Nanos]
 times_ n f a = fst <$> times n f a
 {-# INLINE times_ #-}
 
 -- | Warm up the clock with @n@ dummy reads. Avoids cold-start artefacts
 -- in the first measurement.
 warmup :: Int -> IO ()
-warmup n = sequence_ $ replicate n $ void nanos
+warmup n = replicateM_ n (void nanos)
 {-# INLINE warmup #-}

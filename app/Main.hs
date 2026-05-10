@@ -21,8 +21,8 @@ import Control.Exception (evaluate)
 import Control.Monad (replicateM, when)
 import Data.IORef
 import Data.List qualified as List
-import Options.Applicative
-import System.Clock (getTime, toNanoSecs, Clock (MonotonicRaw))
+import Options.Applicative hiding (action)
+import System.Clock (Clock (MonotonicRaw), getTime, toNanoSecs)
 import System.Exit (exitSuccess)
 import System.IO (hFlush, stdout)
 
@@ -31,16 +31,17 @@ import System.IO (hFlush, stdout)
 -- ---------------------------------------------------------------------------
 
 data Config = Config
-  { cfgRuns   :: !Int
-  , cfgWarmup :: !Int
-  , cfgDump   :: !Bool
+  { cfgRuns :: !Int,
+    cfgWarmup :: !Int,
+    cfgDump :: !Bool
   }
 
 configP :: Parser Config
-configP = Config
-  <$> option auto (long "runs" <> short 'n' <> value 100000 <> help "Number of iterations per benchmark")
-  <*> option auto (long "warmup" <> short 'w' <> value 1000 <> help "Warmup iterations before timing")
-  <*> switch (long "core-dump" <> help "Print Core dump flag (for GHC -ddump-simpl)")
+configP =
+  Config
+    <$> option auto (long "runs" <> short 'n' <> value 100000 <> help "Number of iterations per benchmark")
+    <*> option auto (long "warmup" <> short 'w' <> value 1000 <> help "Warmup iterations before timing")
+    <*> switch (long "core-dump" <> help "Print Core dump flag (for GHC -ddump-simpl)")
 
 -- ---------------------------------------------------------------------------
 -- Measurement helpers
@@ -53,7 +54,7 @@ clockRead = toNanoSecs <$> getTime MonotonicRaw
 
 -- | Measure a single IO action, returning nanoseconds.
 --   Forces the result to NF before the second clock read.
-measureIO :: NFData a => IO a -> IO Nanos
+measureIO :: (NFData a) => IO a -> IO Nanos
 measureIO action = do
   !t0 <- clockRead
   !result <- action
@@ -62,7 +63,7 @@ measureIO action = do
   pure (t1 - t0)
 {-# INLINE measureIO #-}
 
-evaluateNF :: NFData a => a -> IO ()
+evaluateNF :: (NFData a) => a -> IO ()
 evaluateNF x = evaluate (rnf x)
 {-# INLINE evaluateNF #-}
 
@@ -85,21 +86,26 @@ benchmark name warm runs action = do
       p90 = sorted !! (runs * 9 `div` 10)
       avg = sum results `div` fromIntegral runs
 
-  putStrLn $ unwords
-    [ "  p10:" , fmt p10
-    , "p50:", fmt p50
-    , "p90:", fmt p90
-    , "avg:", fmt avg
-    ]
+  putStrLn $
+    unwords
+      [ "  p10:",
+        fmt p10,
+        "p50:",
+        fmt p50,
+        "p90:",
+        fmt p90,
+        "avg:",
+        fmt avg
+      ]
   where
     fmt n = let (v, u) = scaleNanos n in show (round v :: Int) <> u
 
 -- | Scale nanos to human-readable: returns (value, unit).
 scaleNanos :: Nanos -> (Double, String)
 scaleNanos n
-  | n < 1000    = (fromIntegral n, "ns")
+  | n < 1000 = (fromIntegral n, "ns")
   | n < 1000000 = (fromIntegral n / 1e3, "µs")
-  | otherwise   = (fromIntegral n / 1e6, "ms")
+  | otherwise = (fromIntegral n / 1e6, "ms")
 
 -- ---------------------------------------------------------------------------
 -- Benchmark 1: clock overhead
@@ -122,19 +128,20 @@ benchClockOverhead warm runs = benchmark "clock" warm runs $ do
 countWithTrace :: Int -> Kleisli IO (Either Int ()) (Either Int Int)
 countWithTrace target = Kleisli \case
   Right () -> countUp 0
-  Left  n  -> countUp n
+  Left n -> countUp n
   where
     countUp n
       | n >= target = pure (Right n)
-      | otherwise   = pure (Left (n + 1))
+      | otherwise = pure (Left (n + 1))
 
 runTrace :: Int -> IO Int
 runTrace n = runKleisli (trace (countWithTrace n)) ()
 {-# NOINLINE runTrace #-}
 
 benchTrace :: Int -> Int -> Int -> IO ()
-benchTrace target warm runs = benchmark "trace-delim" warm runs $
-  measureIO (runTrace target)
+benchTrace target warm runs =
+  benchmark "trace-delim" warm runs $
+    measureIO (runTrace target)
 
 -- ---------------------------------------------------------------------------
 -- Benchmark 3: whileM_ (control group)
@@ -154,8 +161,9 @@ countWithIORef target = do
 {-# NOINLINE countWithIORef #-}
 
 benchWhileM :: Int -> Int -> Int -> IO ()
-benchWhileM target warm runs = benchmark "whileM_" warm runs $
-  measureIO (countWithIORef target)
+benchWhileM target warm runs =
+  benchmark "whileM_" warm runs $
+    measureIO (countWithIORef target)
 
 -- ---------------------------------------------------------------------------
 -- Core dump flag
@@ -180,10 +188,9 @@ traceCoreSample = do
 main :: IO ()
 main = do
   cfg <- execParser (info (configP <**> helper) fullDesc)
-  let runs   = cfgRuns cfg
-      warm   = cfgWarmup cfg
-      target = 1000  -- fixed iteration count for trace/whileM benchmarks
-
+  let runs = cfgRuns cfg
+      warm = cfgWarmup cfg
+      target = 1000 -- fixed iteration count for trace/whileM benchmarks
   when (cfgDump cfg) $ do
     putStrLn "Core dump requested. Rebuild with:"
     putStrLn "  cabal build perf-bench --ghc-options=\"-ddump-simpl -ddump-to-file -dsuppress-all -dno-suppress-type-signatures -fforce-recomp\""
