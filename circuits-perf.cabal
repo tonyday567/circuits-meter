@@ -6,7 +6,10 @@ author: Tony Day
 maintainer: tonyday567@gmail.com
 category: performance
 build-type: Simple
-tested-with: ghc ==9.14.1
+tested-with:
+  ghc ==9.14.1,
+  ghc ==9.12.2,
+  ghc ==9.10.1
 
 library
   exposed-modules:
@@ -22,3 +25,22 @@ library
   ghc-options:
     -Wall
     -Wcompat
+
+executable perf-bench
+  main-is: Main.hs
+  hs-source-dirs: app
+
+  build-depends:
+    base >=4.20 && <5,
+    circuits,
+    circuits-perf,
+    clock >=0.8 && <0.9,
+    deepseq,
+    optparse-applicative,
+
+  default-language: GHC2024
+  ghc-options:
+    -Wall
+    -Wcompat
+    -O2
+    -rtsopts
