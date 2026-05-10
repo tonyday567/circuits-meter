@@ -37,7 +37,7 @@ version = Version [0,1,0,0] []
 
 -- |The content of the @synopsis@ field of the package's Cabal file.
 synopsis :: String
-synopsis = ""
+synopsis = "Performance measurement primitives for the circuits ecosystem"
 -- |The content of the @copyright@ field of the package's Cabal file.
 copyright :: String
 copyright = ""

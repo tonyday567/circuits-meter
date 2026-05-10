@@ -5,6 +5,10 @@ license: BSD-3-Clause
 author: Tony Day
 maintainer: tonyday567@gmail.com
 category: performance
+synopsis: Performance measurement primitives for the circuits ecosystem
+description:
+  Clock primitives and a benchmark binary for measuring circuit
+  throughput.  Includes a delimited-continuation trace benchmark.
 build-type: Simple
 tested-with:
   ghc ==9.14.1,
@@ -18,7 +22,7 @@ library
   build-depends:
     base >=4.20 && <5,
     clock >=0.8 && <0.9,
-    deepseq,
+    deepseq >=1.4 && <1.6,
 
   hs-source-dirs: src
   default-language: GHC2024
@@ -32,11 +36,11 @@ executable perf-bench
 
   build-depends:
     base >=4.20 && <5,
-    circuits,
+    circuits >=0.1 && <0.2,
     circuits-perf,
     clock >=0.8 && <0.9,
-    deepseq,
-    optparse-applicative,
+    deepseq >=1.4 && <1.6,
+    optparse-applicative >=0.18 && <0.19,
 
   default-language: GHC2024
   ghc-options:
