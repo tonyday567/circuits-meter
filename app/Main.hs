@@ -1,30 +1,35 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 
--- | Benchmark: delimited continuation throughput in Circuit.Traced
+-- | Benchmark: performance measurement as a Circuit.
 --
--- Three measurements:
---   1. clock overhead — raw MonotonicRaw resolution
---   2. trace-delim  — Trace (Kleisli IO) Either: iterate until Right
---   3. whileM_      — control group: IORef + whileM_
+-- Four measurements:
+--   1. clock overhead  — raw MonotonicRaw resolution
+--   2. whileM_         — control group: IORef + whileM_
+--   3. trace-delim     — Trace (Kleisli IO) Either: iterate until Right
+--   4. meterK-loop     — same loop measured with 'Circuit.Perf.meterK'
+--
+-- The last item demonstrates the new API: a 'Meter' wrapped around
+-- the delimited-continuation loop, producing per-iteration timings
+-- via 'timesK'.
 --
 -- Usage:
 --   perf-bench --runs 100000 --warmup 1000
---   perf-bench --runs 100000 --core-dump  (dumps GHC Core if built with -ddump-simpl)
 module Main where
 
-import Circuit.Perf (Nanos, warmup)
-import Circuit.Traced (Trace (..))
-import Control.Arrow (Kleisli (..))
-import Control.DeepSeq (NFData, rnf)
-import Control.Exception (evaluate)
-import Control.Monad (replicateM, when)
+import Circuit.Perf
+import Circuit.Perf.Space
+import Circuit.Perf.Time
+import Circuit.Traced
+import Control.Arrow hiding (loop)
+import Control.Exception
+import Control.Monad
 import Data.IORef
 import Data.List qualified as List
-import Options.Applicative hiding (action)
-import System.Clock (Clock (MonotonicRaw), getTime, toNanoSecs)
-import System.Exit (exitSuccess)
-import System.IO (hFlush, stdout)
+import GHC.Stats
+import Options.Applicative
+import System.IO
+import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
 -- CLI
@@ -33,124 +38,66 @@ import System.IO (hFlush, stdout)
 data Config = Config
   { cfgRuns :: !Int,
     cfgWarmup :: !Int,
-    cfgDump :: !Bool
+    cfgTraceTarget :: !Int
   }
 
 configP :: Parser Config
 configP =
   Config
-    <$> option auto (long "runs" <> short 'n' <> value 100000 <> help "Number of iterations per benchmark")
-    <*> option auto (long "warmup" <> short 'w' <> value 1000 <> help "Warmup iterations before timing")
-    <*> switch (long "core-dump" <> help "Print Core dump flag (for GHC -ddump-simpl)")
+    <$> option auto (long "runs" <> short 'n' <> value 100000 <> help "Number of outer iterations")
+    <*> option auto (long "warmup" <> short 'w' <> value 1000 <> help "Warmup iterations")
+    <*> option auto (long "trace-target" <> short 't' <> value 1000 <> help "Inner loop count for trace/whileM")
 
 -- ---------------------------------------------------------------------------
--- Measurement helpers
+-- Reporting
 -- ---------------------------------------------------------------------------
 
--- | Single clock read in nanoseconds.
-clockRead :: IO Nanos
-clockRead = toNanoSecs <$> getTime MonotonicRaw
-{-# INLINE clockRead #-}
+fmt :: Nanos -> String
+fmt n = let (v, u) = scaleNanos n in show (round v :: Int) <> u
 
--- | Measure a single IO action, returning nanoseconds.
---   Forces the result to NF before the second clock read.
-measureIO :: (NFData a) => IO a -> IO Nanos
-measureIO action = do
-  !t0 <- clockRead
-  !result <- action
-  evaluateNF result
-  !t1 <- clockRead
-  pure (t1 - t0)
-{-# INLINE measureIO #-}
-
-evaluateNF :: (NFData a) => a -> IO ()
-evaluateNF x = evaluate (rnf x)
-{-# INLINE evaluateNF #-}
-
--- | Run a benchmark N times, return per-iteration nanos (percentiles).
-benchmark :: String -> Int -> Int -> IO Nanos -> IO ()
-benchmark name warm runs action = do
-  putStr $ name <> ": warming up... "
-  hFlush stdout
-  warmup warm
-  putStrLn "done"
-
-  putStr $ name <> ": running " <> show runs <> " iterations... "
-  hFlush stdout
-  results <- replicateM runs action
-  putStrLn "done"
-
-  let sorted = List.sort results
-      p10 = sorted !! (runs `div` 10)
-      p50 = sorted !! (runs `div` 2)
-      p90 = sorted !! (runs * 9 `div` 10)
-      avg = sum results `div` fromIntegral runs
-
-  putStrLn $
-    unwords
-      [ "  p10:",
-        fmt p10,
-        "p50:",
-        fmt p50,
-        "p90:",
-        fmt p90,
-        "avg:",
-        fmt avg
-      ]
-  where
-    fmt n = let (v, u) = scaleNanos n in show (round v :: Int) <> u
-
--- | Scale nanos to human-readable: returns (value, unit).
 scaleNanos :: Nanos -> (Double, String)
 scaleNanos n
   | n < 1000 = (fromIntegral n, "ns")
   | n < 1000000 = (fromIntegral n / 1e3, "µs")
   | otherwise = (fromIntegral n / 1e6, "ms")
 
+report :: String -> [Nanos] -> IO ()
+report name xs = do
+  let sorted = List.sort xs
+      n = length xs
+      p10 = sorted !! (n `div` 10)
+      p50 = sorted !! (n `div` 2)
+      p90 = sorted !! (n * 9 `div` 10)
+      avg = sum sorted `div` fromIntegral n
+  putStrLn $
+    name
+      <> ": p10="
+      <> fmt p10
+      <> " p50="
+      <> fmt p50
+      <> " p90="
+      <> fmt p90
+      <> " avg="
+      <> fmt avg
+
 -- ---------------------------------------------------------------------------
 -- Benchmark 1: clock overhead
 -- ---------------------------------------------------------------------------
 
--- | How long does it take to read the clock twice?
-benchClockOverhead :: Int -> Int -> IO ()
-benchClockOverhead warm runs = benchmark "clock" warm runs $ do
-  !t0 <- clockRead
-  !t1 <- clockRead
-  pure (t1 - t0)
+benchClock :: Config -> IO [Nanos]
+benchClock cfg = do
+  let n = cfgRuns cfg
+  replicateM n do
+    !t0 <- nanos
+    !t1 <- nanos
+    pure (t1 - t0)
 
 -- ---------------------------------------------------------------------------
--- Benchmark 2: delimited continuation trace
+-- Benchmark 2: whileM_ control group
 -- ---------------------------------------------------------------------------
 
--- | Count from 0 to a target using Trace (Kleisli IO) Either.
---   Each iteration: read the counter, increment if < target, otherwise stop.
---   Internally uses prompt/control0 (delimited continuations).
-countWithTrace :: Int -> Kleisli IO (Either Int ()) (Either Int Int)
-countWithTrace target = Kleisli \case
-  Right () -> countUp 0
-  Left n -> countUp n
-  where
-    countUp n
-      | n >= target = pure (Right n)
-      | otherwise = pure (Left (n + 1))
-
-runTrace :: Int -> IO Int
-runTrace n = runKleisli (trace (countWithTrace n)) ()
-{-# NOINLINE runTrace #-}
-
-benchTrace :: Int -> Int -> Int -> IO ()
-benchTrace target warm runs =
-  benchmark "trace-delim" warm runs $
-    measureIO (runTrace target)
-
--- ---------------------------------------------------------------------------
--- Benchmark 3: whileM_ (control group)
--- ---------------------------------------------------------------------------
-
--- | Same counting loop using IORef + whileM_.
---   No delimited continuations — just a mutable cell and a loop.
-countWithIORef :: Int -> IO Int
-countWithIORef target = do
+countIORef :: Int -> IO Int
+countIORef target = do
   ref <- newIORef 0
   let loop = do
         n <- readIORef ref
@@ -158,28 +105,83 @@ countWithIORef target = do
           then pure n
           else writeIORef ref (n + 1) >> loop
   loop
-{-# NOINLINE countWithIORef #-}
+{-# NOINLINE countIORef #-}
 
-benchWhileM :: Int -> Int -> Int -> IO ()
-benchWhileM target warm runs =
-  benchmark "whileM_" warm runs $
-    measureIO (countWithIORef target)
+benchWhileM :: Config -> IO [Nanos]
+benchWhileM cfg = do
+  let target = cfgTraceTarget cfg
+      n = cfgRuns cfg
+  replicateM n do
+    !t0 <- nanos
+    !r <- countIORef target
+    _ <- evaluate r
+    !t1 <- nanos
+    pure (t1 - t0)
 
 -- ---------------------------------------------------------------------------
--- Core dump flag
+-- Benchmark 3: delimited continuation trace
 -- ---------------------------------------------------------------------------
 
--- | This function exists so GHC can dump Core for it when built with
---   -ddump-simpl -ddump-to-file. It's NOINLINE to prevent GHC from
---   inlining the trace body away.
---
---   Build with:
---     cabal build perf-bench --ghc-options="-ddump-simpl -ddump-to-file -dsuppress-all -dno-suppress-type-signatures -fforce-recomp"
---   Output goes to dist-newstyle/build/.../Main.dump-simpl
-traceCoreSample :: IO Int
-traceCoreSample = do
-  runTrace 1000
-{-# NOINLINE traceCoreSample #-}
+countTrace :: Int -> Kleisli IO (Either Int ()) (Either Int Int)
+countTrace target = Kleisli \case
+  Right () -> countUp 0
+  Left n -> countUp n
+  where
+    countUp n
+      | n >= target = pure (Right n)
+      | otherwise = pure (Left (n + 1))
+{-# NOINLINE countTrace #-}
+
+runTrace :: Int -> IO Int
+runTrace n = runKleisli (trace (countTrace n)) ()
+{-# NOINLINE runTrace #-}
+
+benchTrace :: Config -> IO [Nanos]
+benchTrace cfg = do
+  let target = cfgTraceTarget cfg
+      n = cfgRuns cfg
+  replicateM n do
+    !t0 <- nanos
+    !r <- runTrace target
+    _ <- evaluate r
+    !t1 <- nanos
+    pure (t1 - t0)
+
+-- ---------------------------------------------------------------------------
+-- Benchmark 4: meterK on the trace loop
+-- ---------------------------------------------------------------------------
+
+-- | The trace loop wrapped in a 'Meter'. 'meterK timeM' adds clock
+-- reads before and after each call to 'runKleisli (trace ...)'. The
+-- 'timesK' combinator then iterates this measured arrow.
+benchMeterK :: Config -> IO [Nanos]
+benchMeterK cfg = do
+  let target = cfgTraceTarget cfg
+      n = cfgRuns cfg
+      kaction = Kleisli (\() -> runTrace target)
+  (ts, _r) <- runKleisli (timesK n timeM kaction) ()
+  pure ts
+
+-- ---------------------------------------------------------------------------
+-- Benchmark 5: simultaneous time + space (single shot)
+-- ---------------------------------------------------------------------------
+
+benchBoth :: Config -> IO ()
+benchBoth cfg = do
+  enabled <- getRTSStatsEnabled
+  if not enabled
+    then putStrLn "time+space: skipped (enable with +RTS -T)"
+    else do
+      let target = cfgTraceTarget cfg
+          meter = both timeM allocM
+          kaction = Kleisli (\() -> runTrace target)
+      ((dt, alloc), _r) <- runKleisli (meterK meter kaction) ()
+      putStrLn $
+        "time+space: time="
+          <> fmt dt
+          <> " alloc="
+          <> show (unbytes alloc)
+          <> "B"
 
 -- ---------------------------------------------------------------------------
 -- Main
@@ -190,23 +192,41 @@ main = do
   cfg <- execParser (info (configP <**> helper) fullDesc)
   let runs = cfgRuns cfg
       warm = cfgWarmup cfg
-      target = 1000 -- fixed iteration count for trace/whileM benchmarks
-  when (cfgDump cfg) $ do
-    putStrLn "Core dump requested. Rebuild with:"
-    putStrLn "  cabal build perf-bench --ghc-options=\"-ddump-simpl -ddump-to-file -dsuppress-all -dno-suppress-type-signatures -fforce-recomp\""
-    putStrLn "Then look in dist-newstyle/build/.../Main.dump-simpl for traceCoreSample"
-    exitSuccess
+      target = cfgTraceTarget cfg
 
   putStrLn $ "perf-bench: runs=" <> show runs <> " warmup=" <> show warm <> " trace-target=" <> show target
   putStrLn ""
 
-  benchClockOverhead warm runs
+  -- clock overhead
+  putStrLn "1. clock overhead"
+  warmup warm
+  cs <- benchClock cfg
+  report "clock" cs
   putStrLn ""
 
-  benchWhileM target warm runs
+  -- whileM_ control
+  putStrLn "2. whileM_ (IORef control)"
+  warmup warm
+  ws <- benchWhileM cfg
+  report "whileM_" ws
   putStrLn ""
 
-  benchTrace target warm runs
+  -- trace-delim
+  putStrLn "3. trace-delim (delimited continuations)"
+  warmup warm
+  ts <- benchTrace cfg
+  report "trace-delim" ts
+  putStrLn ""
+
+  -- meterK on trace
+  putStrLn "4. meterK + timesK (circuit perf API)"
+  ms <- benchMeterK cfg
+  report "meterK" ms
+  putStrLn ""
+
+  -- simultaneous time + space (single shot, not repeated)
+  putStrLn "5. both timeM + allocM (single shot)"
+  benchBoth cfg
   putStrLn ""
 
   putStrLn "Done."

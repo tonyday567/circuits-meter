@@ -1,14 +1,18 @@
 cabal-version: 3.0
-name: circuits-perf
+name: circuits-meter
 version: 0.1.0.0
 license: BSD-3-Clause
 author: Tony Day
 maintainer: tonyday567@gmail.com
 category: performance
-synopsis: Performance measurement primitives for the circuits ecosystem
+synopsis: Performance measurement as a Circuit
 description:
-  Clock primitives and a benchmark binary for measuring circuit
-  throughput.  Includes a delimited-continuation trace benchmark.
+  Performance measurement reimagined as a traced monoidal category.
+  'Meter' is the circuit analogue of 'StepMeasure': a state wire
+  introduced before a computation and read after. Time, space, and
+  combined meters compose via the @(,)@ and 'Either' tensors.
+  Includes a benchmark comparing delimited-continuation trace
+  against IORef control groups.
 build-type: Simple
 tested-with:
   ghc ==9.14.1,
@@ -18,11 +22,16 @@ tested-with:
 library
   exposed-modules:
     Circuit.Perf
+    Circuit.Perf.Time
+    Circuit.Perf.Space
 
   build-depends:
     base >=4.20 && <5,
+    circuits >=0.1 && <0.2,
     clock >=0.8 && <0.9,
     deepseq >=1.4 && <1.6,
+    profunctors >=5.6 && <5.7,
+    text >=2.0 && <2.2,
 
   hs-source-dirs: src
   default-language: GHC2024
@@ -37,10 +46,11 @@ executable perf-bench
   build-depends:
     base >=4.20 && <5,
     circuits >=0.1 && <0.2,
-    circuits-perf,
+    circuits-meter,
     clock >=0.8 && <0.9,
     deepseq >=1.4 && <1.6,
     optparse-applicative >=0.18 && <0.19,
+    text >=2.0 && <2.2,
 
   default-language: GHC2024
   ghc-options:

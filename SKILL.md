@@ -1,4 +1,4 @@
-# circuits-perf — agent field guide
+# circuits-meter — agent field guide
 
 Performance measurement for circuits. A benchmark binary (`perf-bench`)
 and a `Circuit.Perf` library providing clock primitives and loop helpers.
@@ -6,9 +6,14 @@ and a `Circuit.Perf` library providing clock primitives and loop helpers.
 ## module map
 
 ```
-Circuit.Perf   — Nanos, nanos, once, once_, times, times_, warmup
-app/Main.hs    — perf-bench executable: three benchmarks + Core dump
+Circuit.Perf      — Nanos, nanos, once, once_, times, times_, warmup
+app/Main.hs       — perf-bench executable: four benchmarks + Core dump
+examples/         — scaling.md, nub.md, seismo.md, core-analysis.md
 ```
+
+## skill stack
+
+`circuits-meter` is designed to be used with the `read-ghc-core` skill (user scope). The meter tells you *that* something costs 18ns; Core tells you *why*. See `examples/core-analysis.md` for the integration workflow.
 
 Minimal. No Measure, StepMeasure, PerfT, or reporting machinery — just
 clock reads and tight loops. The library is designed to be composed as a
@@ -17,7 +22,7 @@ Circuit plugin layer (see `circuits/examples/perf.md` for the design).
 ## build and test
 
 ```bash
-cd ~/haskell/circuits-perf
+cd ~/haskell/circuits-meter
 
 # Build
 cabal build
@@ -85,7 +90,12 @@ Output goes to:
 dist-newstyle/build/.../perf-bench-tmp/app/Main.dump-simpl
 ```
 
-### what to look for
+For the full walkthrough — reading Core for `countIORef`, `runTrace`,
+`timesK`, `reify`, and `hold` — see `examples/core-analysis.md`. That
+card extracts real Core snippets and explains what each pattern means
+for the meter reading.
+
+### quick checklist
 
 **Worker/wrapper.** GHC creates unboxed workers (prefixed `$w`) that
 operate on `Int#`, `State# RealWorld` — no heap allocation for arithmetic.
@@ -95,38 +105,35 @@ If you see `I#` boxing in a hot loop, something is wrong.
 continuation primitives. They appear directly in Core — no library
 abstraction survives compilation.
 
-**Letrec loops.** `letrec { $sloop = \... -> ... $sloop ... }` is a
+**Letrec loops.** `joinrec { $wgo = \... -> ... jump $wgo ... }` is a
 tail-recursive loop compiled to a jump, not a call. Good.
 
 **INLINE/NOINLINE.** `NOINLINE` on benchmark entry points (`runTrace`,
-`countWithIORef`) prevents GHC from inlining the entire benchmark into
+`countIORef`) prevents GHC from inlining the entire benchmark into
 the measurement loop and dead-code eliminating the work. Without it,
 GHC can constant-fold a 1000-iteration counting loop to `pure 1000`.
 
-### traceCoreSample
-
-The `traceCoreSample` function in Main.hs exists solely as a Core dump
-target. It's `NOINLINE` and calls `runTrace 1000` with fixed arguments
-so GHC can't constant-fold it. Search for `traceCoreSample` in the dump
-to find the compiled delimited continuation loop.
+**`hold` in Core.** Search for `hold` in the dump. It appears as
+`f (hold x)` inside a `let` binding — the optimizer cannot float it
+out because `hold` is `NOINLINE`. This is the anti-optimization wall.
 
 ## dependencies
 
-circuits-perf depends on `circuits` for the `Trace` class. The
+circuits-meter depends on `circuits` for the `Trace` class. The
 `cabal.project` references circuits as a `source-repository-package`
 from GitHub. For local development, `cabal.project.local` overrides
 with a relative path.
 
 ```
 # cabal.project (committed, for CI)
-packages: circuits-perf.cabal
+packages: circuits-meter.cabal
 source-repository-package
   type: git
   location: https://github.com/tonyday567/circuits.git
   branch: main
 
 # cabal.project.local (not committed, for local dev)
-packages: circuits-perf.cabal, ../circuits/circuits.cabal
+packages: circuits-meter.cabal, ../circuits/circuits.cabal
 ```
 
 ## results (Apple Silicon M3, GHC 9.14.1, -O2)
