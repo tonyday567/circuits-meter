@@ -57,6 +57,7 @@ module Circuit.Perf
   )
 where
 
+import Circuit.Braided (ambient)
 import Circuit.Circuit
 import Circuit.Traced (Trace)
 import Control.Arrow
@@ -126,12 +127,11 @@ postC_ :: (s -> IO t) -> Circuit (Kleisli IO) (,) (s, b) b
 postC_ post = Lift (Kleisli \(s, b) -> b <$ post s)
 {-# INLINEABLE postC_ #-}
 
--- | 'ambient' specialized to the @(,)@ tensor — threads a state wire
--- through a circuit using the standard cartesian braid.
+-- | 'ambient' already threads a state wire through a circuit using the
+-- canonical braid from the 'Braided' instance.  This alias keeps the
+-- old name for backward compatibility.
 ambientPair :: (Profunctor arr, Trace arr (,)) => Circuit arr (,) a b -> Circuit arr (,) (s, a) (s, b)
-ambientPair = ambient braid
-  where
-    braid (x, (s, a)) = (s, (x, a))
+ambientPair = ambient
 {-# INLINEABLE ambientPair #-}
 
 -- | Left meter bracket. Introduces the meter's state wire and threads

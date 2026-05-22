@@ -22,12 +22,12 @@ where
 
 import Circuit.Perf
 import Control.Category ((.))
+import Data.Functor ((<&>))
 import Data.Text (Text)
 import Data.Word (Word32, Word64)
 import GHC.Stats
 import System.Mem
 import Prelude hiding (id, (.))
-import Data.Functor ((<&>))
 
 -- | Allocation statistics from the GHC RTS.
 data SpaceStats = SpaceStats
