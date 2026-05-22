@@ -21,6 +21,7 @@ module Circuit.Perf.Space
 where
 
 import Circuit.Perf
+import Control.Category ((.))
 import Data.Text (Text)
 import Data.Word (Word32, Word64)
 import GHC.Stats
@@ -91,9 +92,9 @@ spaceM =
 allocM :: Meter Bytes Bytes
 allocM =
   Meter
-    { pre = fmap (\s -> Bytes (allocated_bytes s)) getRTSStats,
+    { pre = fmap (Bytes . allocated_bytes) getRTSStats,
       post = \s -> do
-        s' <- fmap (\x -> Bytes (allocated_bytes x)) getRTSStats
+        s' <- fmap (Bytes . allocated_bytes) getRTSStats
         pure (s' - s)
     }
 {-# INLINEABLE allocM #-}

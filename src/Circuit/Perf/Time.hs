@@ -56,7 +56,7 @@ tickForce f a = do
 
 -- | @n@ timings of the same function. Returns @( [nanos], lastResult )@.
 ticks :: (NFData b) => Int -> (a -> b) -> a -> IO ([Nanos], b)
-ticks n f a = runKleisli (timesC n timeM f) a
+ticks n f = runKleisli (timesC n timeM f)
 {-# INLINEABLE ticks #-}
 
 -- | @n@ timings collapsed to a single average nanosecond count.

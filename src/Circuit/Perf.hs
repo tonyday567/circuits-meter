@@ -70,16 +70,17 @@ import Prelude hiding (id, (.))
 
 -- | Local synonym for 'Compose'.
 infixr 9 ⊙
+
 (⊙) :: Circuit arr t b c -> Circuit arr t a b -> Circuit arr t a c
 (⊙) = Compose
 {-# INLINE (⊙) #-}
 
 -- | Left-to-right sequential composition.
 infixl 9 ↣
+
 (↣) :: Circuit arr t a b -> Circuit arr t b c -> Circuit arr t a c
 f ↣ g = g ⊙ f
 {-# INLINE (↣) #-}
-
 
 -- ---------------------------------------------------------------------------
 -- Clock primitives
@@ -140,6 +141,7 @@ ambientPair = ambient braid
 --   timeM ◅ two
 -- @
 infixl 5 ◅
+
 (◅) :: Meter s t -> Circuit (Kleisli IO) (,) a b -> Circuit (Kleisli IO) (,) a (s, b)
 m ◅ c = ambientPair c ⊙ preC (pre m)
 {-# INLINE (◅) #-}
@@ -151,6 +153,7 @@ m ◅ c = ambientPair c ⊙ preC (pre m)
 --   (timeM ◅ two) ▻ timeM
 -- @
 infixl 5 ▻
+
 (▻) :: Circuit (Kleisli IO) (,) a (s, b) -> Meter s t -> Circuit (Kleisli IO) (,) a b
 c ▻ m = postC_ (post m) ⊙ c
 {-# INLINE (▻) #-}
@@ -209,7 +212,7 @@ hold x = x
 -- | Measure a single call to a pure function. Forces the result to NF
 -- inside the timed IO action so the work cannot be floated out.
 once :: (NFData b) => Meter s t -> (a -> b) -> a -> IO (t, b)
-once m f a = runKleisli (meterK m (Kleisli (\x -> evaluate (force (f (hold x)))))) a
+once m f = runKleisli (meterK m (Kleisli (evaluate . force . f . hold)))
 {-# INLINEABLE once #-}
 
 -- | Measure a single call, discarding the result.
@@ -246,7 +249,7 @@ timesK n m k = Kleisli \a -> do
 -- | Lifted variant of 'timesK' for pure functions. Forces the result
 -- to NF inside the timed IO action so the work cannot be floated out.
 timesC :: (NFData b) => Int -> Meter s t -> (a -> b) -> Kleisli IO a ([t], b)
-timesC n m f = timesK n m (Kleisli (\x -> evaluate (force (f (hold x)))))
+timesC n m f = timesK n m (Kleisli (evaluate . force . f . hold))
 {-# INLINEABLE timesC #-}
 
 -- | Repeated measurement, discarding results.
