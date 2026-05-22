@@ -55,6 +55,9 @@ module Circuit.Perf
     -- * Warmup
     warmup,
     warmupK,
+
+    -- * Ambient metering
+    meteredAmbient,
   )
 where
 
@@ -187,6 +190,28 @@ meterK m k = reify (meterC m (Lift k))
 meterK_ :: Meter s t -> Kleisli IO a b -> Kleisli IO a b
 meterK_ m k = reify (meterC_ m (Lift k))
 {-# INLINEABLE meterK_ #-}
+
+-- | Wrap a Kleisli arrow with a meter, accumulating the measurement into
+-- an ambient state wire on the @(,)@ tensor.
+--
+-- The state @s@ rides alongside the payload; the metered stage reads it,
+-- runs the computation, and returns the updated state.  This composes
+-- with 'ambient' to thread a measurement map through a pipeline, and
+-- with 'Knot' to carry measurements through a feedback loop.
+--
+-- @
+--   meteredAmbient accum timeM (Kleisli f)
+--     = Kleisli \(s, a) -> do
+--         s0 <- pre timeM; b <- f a; t <- post timeM s0
+--         pure (accum s t, b)
+-- @
+meteredAmbient :: (s -> t -> s) -> Meter s t -> Kleisli IO a b -> Circuit (Kleisli IO) (,) (s, a) (s, b)
+meteredAmbient accum m (Kleisli f) = Lift $ Kleisli $ \(s, a) -> do
+  s0 <- pre m
+  b <- f a
+  t <- post m s0
+  pure (accum s t, b)
+{-# INLINEABLE meteredAmbient #-}
 
 -- | Run two meters simultaneously.
 --
