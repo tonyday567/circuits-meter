@@ -22,6 +22,7 @@ tested-with:
 library
   exposed-modules:
     Circuit.Perf
+    Circuit.Perf.Signal
     Circuit.Perf.Time
     Circuit.Perf.Space
 

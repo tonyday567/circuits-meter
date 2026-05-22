@@ -38,6 +38,7 @@ module Circuit.Perf
     meterK_,
     meterC,
     meterC_,
+    (↣),
     (◅),
     (▻),
     both,
@@ -54,11 +55,17 @@ module Circuit.Perf
     -- * Warmup
     warmup,
     warmupK,
+
+    -- * Signal loop (re-exported from Circuit.Perf.Signal)
+    Signal (..),
+    (<|>),
+    loopAlt,
   )
 where
 
 import Circuit.Braided (ambient)
 import Circuit.Circuit
+import Circuit.Perf.Signal (Signal (..), loopAlt, (<|>))
 import Circuit.Traced (Trace)
 import Control.Arrow
 import Control.Category
