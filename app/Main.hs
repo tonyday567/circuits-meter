@@ -7,7 +7,7 @@
 --   1. clock overhead  — raw MonotonicRaw resolution
 --   2. whileM_         — control group: IORef + whileM_
 --   3. trace-delim     — Trace (Kleisli IO) Either: iterate until Right
---   4. meterK-loop     — same loop measured with 'Circuit.Perf.meterK'
+--   4. meterK-loop     — same loop measured with 'Circuit.Meter.meterK'
 --
 -- The last item demonstrates the new API: a 'Meter' wrapped around
 -- the delimited-continuation loop, producing per-iteration timings
@@ -17,9 +17,9 @@
 --   perf-bench --runs 100000 --warmup 1000
 module Main where
 
-import Circuit.Perf
-import Circuit.Perf.Space
-import Circuit.Perf.Time
+import Circuit.Meter
+import Circuit.Meter.Space
+import Circuit.Meter.Time
 import Circuit.Traced
 import Control.Arrow hiding (loop)
 import Control.Exception
@@ -159,7 +159,7 @@ benchMeterK cfg = do
   let target = cfgTraceTarget cfg
       n = cfgRuns cfg
       kaction = Kleisli (\() -> runTrace target)
-  (ts, _r) <- runKleisli (timesK n timeM kaction) ()
+  (ts, _r) <- runKleisli (timesK 0 n timeM kaction) ()
   pure ts
 
 -- ---------------------------------------------------------------------------
@@ -173,9 +173,9 @@ benchBoth cfg = do
     then putStrLn "time+space: skipped (enable with +RTS -T)"
     else do
       let target = cfgTraceTarget cfg
-          meter = both timeM allocM
+          meterBoth = both timeM allocM
           kaction = Kleisli (\() -> runTrace target)
-      ((dt, alloc), _r) <- runKleisli (meterK meter kaction) ()
+      ((dt, alloc), _r) <- runKleisli (meterK meterBoth kaction) ()
       putStrLn $
         "time+space: time="
           <> fmt dt

@@ -8,11 +8,11 @@ category: performance
 synopsis: Performance measurement as a Circuit
 description:
   Performance measurement reimagined as a traced monoidal category.
-  'Meter' is the circuit analogue of 'StepMeasure': a state wire
-  introduced before a computation and read after. Time, space, and
-  combined meters compose via the @(,)@ and 'Either' tensors.
-  Includes a benchmark comparing delimited-continuation trace
-  against IORef control groups.
+  'Meter' is a state wire introduced before a computation and read
+  after: 'initK' creates the state, 'termK' observes it. Time, space,
+  and combined meters compose sequentially and in parallel via the
+  cartesian tensor. Includes a benchmark comparing circuit-based
+  measurement against IORef control groups.
 build-type: Simple
 tested-with:
   ghc ==9.14.1,
@@ -21,9 +21,9 @@ tested-with:
 
 library
   exposed-modules:
-    Circuit.Perf
-    Circuit.Perf.Time
-    Circuit.Perf.Space
+    Circuit.Meter
+    Circuit.Meter.Time
+    Circuit.Meter.Space
 
   build-depends:
     base >=4.20 && <5,

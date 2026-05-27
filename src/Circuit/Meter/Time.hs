@@ -23,9 +23,6 @@ module Circuit.Meter.Time
     meterIO,
     meter,
 
-    -- * StepMeasure compatibility
-    stepTime,
-
     -- * Warmup
     warmup,
     warmupK,
@@ -33,6 +30,7 @@ module Circuit.Meter.Time
     -- * Single-shot measurement runners
     once,
     once_,
+    onceK,
 
     -- * Repeated measurement runners
     timesK,
@@ -48,6 +46,7 @@ import Control.Category ((.))
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
+import Control.Monad.Fix
 import System.Clock
 import Prelude hiding (id, (.))
 
@@ -74,7 +73,7 @@ nanos = toNanoSecs <$> getTime MonotonicRaw
 -- >>> import Circuit.Meter (meterK)
 -- >>> runKleisli (meterK timeM (Kleisli (pure . (*2)))) 5
 -- (...,10)
-timeM :: Meter IO Nanos Nanos
+timeM :: Meter (Kleisli IO) Nanos Nanos
 timeM =
   mkMeter
     nanos
@@ -90,14 +89,19 @@ timeM =
 
 -- | Measure a single call to a pure function. Forces the result to NF
 -- inside the timed 'IO' action so the work cannot be floated out.
-once :: (NFData d) => Meter IO a b -> (c -> d) -> c -> IO (b, d)
+once :: (NFData d) => Meter (Kleisli IO) a b -> (c -> d) -> c -> IO (b, d)
 once m f = runKleisli (meterK m (Kleisli (evaluate . force . f . hold)))
 {-# INLINEABLE once #-}
 
 -- | Measure a single call, discarding the result.
-once_ :: (NFData d) => Meter IO a b -> (c -> d) -> c -> IO b
+once_ :: (NFData d) => Meter (Kleisli IO) a b -> (c -> d) -> c -> IO b
 once_ m f a = fst <$> once m f a
 {-# INLINEABLE once_ #-}
+
+-- | Measure a single call to a Kleisli arrow.
+onceK :: (MonadFix m) => Meter (Kleisli m) a b -> Kleisli m c d -> c -> m (b, d)
+onceK m k = runKleisli (meterK m k)
+{-# INLINEABLE onceK #-}
 
 -- | Single timing of a pure function. Returns @(nanos, result)@.
 tick :: (NFData b) => (a -> b) -> a -> IO (Nanos, b)
@@ -145,12 +149,6 @@ meter :: (NFData b) => (a -> b) -> Circuit (Kleisli IO) (,) a (Nanos, b)
 meter f = meterAction timeM (Kleisli (evaluate . force . f . hold))
 {-# INLINEABLE meter #-}
 
--- | 'StepMeasure'-style clock read for interoperability with the
--- @perf@ library pattern.
-stepTime :: Meter IO Nanos Nanos
-stepTime = timeM
-{-# INLINE stepTime #-}
-
 -- ---------------------------------------------------------------------------
 -- Warmup
 -- ---------------------------------------------------------------------------
@@ -160,8 +158,8 @@ warmup :: Int -> IO ()
 warmup n = replicateM_ n (void nanos)
 {-# INLINE warmup #-}
 
--- | Warmup as a 'Kleisli' circuit. Runs the action @n@ times, then
--- passes the input through unchanged.
+-- | Warmup as a 'Kleisli' circuit. Evaluates the input to WHNF @n@
+-- times as a warmup side-effect, then passes it through unchanged.
 --
 -- This is the identity circuit with a side-effecting prefix — useful
 -- for sequencing warmup before measurement in a pipeline.
@@ -182,11 +180,11 @@ warmupK n = Kleisli \a -> replicateM_ n (evaluate a) >> pure a
 -- >>> import Control.Arrow (Kleisli(..))
 -- >>> import Circuit.Meter (Meter(..))
 -- >>> let m = Meter (Kleisli $ \_ -> pure 0) (Kleisli $ \_ -> pure 0)
--- >>> runKleisli (timesK 3 m (Kleisli (pure . (*2)))) 5
+-- >>> runKleisli (timesK 100 3 m (Kleisli (pure . (*2)))) 5
 -- ([...,...,...],10)
-timesK :: Int -> Meter IO a b -> Kleisli IO c d -> Kleisli IO c ([b], d)
-timesK n m k = Kleisli \a -> do
-  warmup 100
+timesK :: Int -> Int -> Meter (Kleisli IO) a b -> Kleisli IO c d -> Kleisli IO c ([b], d)
+timesK w n m k = Kleisli \a -> do
+  warmup w
   let step !x = runKleisli (meterK m k) x
       go 1 !x acc = do
         (t, b) <- step x
@@ -199,11 +197,11 @@ timesK n m k = Kleisli \a -> do
 
 -- | Lifted variant of 'timesK' for pure functions. Forces the result
 -- to NF inside the timed 'IO' action so the work cannot be floated out.
-timesC :: (NFData d) => Int -> Meter IO a b -> (c -> d) -> Kleisli IO c ([b], d)
-timesC n m f = timesK n m (Kleisli (evaluate . force . f . hold))
+timesC :: (NFData d) => Int -> Meter (Kleisli IO) a b -> (c -> d) -> Kleisli IO c ([b], d)
+timesC n m f = timesK 100 n m (Kleisli (evaluate . force . f . hold))
 {-# INLINEABLE timesC #-}
 
 -- | Repeated measurement, discarding results.
-times_ :: (NFData d) => Int -> Meter IO a b -> (c -> d) -> c -> IO [b]
+times_ :: (NFData d) => Int -> Meter (Kleisli IO) a b -> (c -> d) -> c -> IO [b]
 times_ n m f a = fst <$> runKleisli (timesC n m f) a
 {-# INLINEABLE times_ #-}
