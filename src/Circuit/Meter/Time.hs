@@ -3,8 +3,7 @@
 -- | Time measurement as a Circuit.
 --
 -- 'timeM' is the canonical 'Meter' for nanosecond timing. All other
--- time combinators are derived from it via 'Circuit.Meter.meterA' and
--- the 'Trace' iteration structure.
+-- time combinators are derived from it via 'Circuit.Meter.meterAction'.
 module Circuit.Meter.Time
   ( -- * Time meter
     Nanos,
@@ -27,6 +26,9 @@ module Circuit.Meter.Time
     warmup,
     warmupK,
 
+    -- * Reify helper
+    reifyC,
+
     -- * Single-shot measurement runners
     once,
     once_,
@@ -42,7 +44,7 @@ where
 import Circuit
 import Circuit.Meter
 import Control.Arrow
-import Control.Category ((.))
+import Control.Category (Category, (.))
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
@@ -94,7 +96,7 @@ timeM =
 -- | Measure a single call to a pure function. Forces the result to NF
 -- inside the timed 'IO' action so the work cannot be floated out.
 once :: (NFData d) => Meter (Kleisli IO) a b -> (c -> d) -> c -> IO (b, d)
-once m f = runKleisli (meterA m (Kleisli (evaluate . force . f . hold)))
+once m f c = runKleisli (reifyC (meterAction m (Kleisli (evaluate . force . f . hold)))) c
 {-# INLINEABLE once #-}
 
 -- | Measure a single call, discarding the result.
@@ -104,8 +106,16 @@ once_ m f a = fst <$> once m f a
 
 -- | Measure a single call to a Kleisli arrow.
 onceK :: (MonadFix m) => Meter (Kleisli m) a b -> Kleisli m c d -> c -> m (b, d)
-onceK m k = runKleisli (meterA m k)
+onceK m k c = runKleisli (reifyC (meterAction m k)) c
 {-# INLINEABLE onceK #-}
+
+-- | Reify a circuit using the cartesian tensor @(,)@.
+--
+-- Convenience alias for 'reify' with @t = (,)@, used by the runners
+-- below to extract a 'Kleisli' from a metered circuit.
+reifyC :: (Category arr, Trace arr (,)) => Circuit arr (,) a b -> arr a b
+reifyC = reify
+{-# INLINE reifyC #-}
 
 -- | Single timing of a pure function. Returns @(nanos, result)@.
 tick :: (NFData b) => (a -> b) -> a -> IO (Nanos, b)
@@ -148,13 +158,13 @@ ticksN n f a = do
 -- be lifted into pipelines using either @(,)@ (lazy knot-tying) or
 -- 'Either' (iteration) without changing the combinator.
 meterIO :: (a -> IO b) -> Circuit (Kleisli IO) t a (Nanos, b)
-meterIO f = Lift (meterA timeM (Kleisli f))
+meterIO f = meterAction timeM (Kleisli f)
 {-# INLINEABLE meterIO #-}
 
 -- | Meter a pure function with 'timeM'. Forces to NF inside the timed
 -- bracket so the work cannot be floated out.
 meter :: (NFData b) => (a -> b) -> Circuit (Kleisli IO) t a (Nanos, b)
-meter f = Lift (meterA timeM (Kleisli (evaluate . force . f . hold)))
+meter f = meterAction timeM (Kleisli (evaluate . force . f . hold))
 {-# INLINEABLE meter #-}
 
 -- ---------------------------------------------------------------------------
@@ -193,7 +203,7 @@ warmupK n = Kleisli \a -> replicateM_ n (evaluate a) >> pure a
 timesK :: Int -> Int -> Meter (Kleisli IO) a b -> Kleisli IO c d -> Kleisli IO c ([b], d)
 timesK w n m k = Kleisli \a -> do
   warmup w
-  let step !x = runKleisli (meterA m k) x
+  let step !x = runKleisli (reifyC (meterAction m k)) x
       go 1 !x acc = do
         (t, b) <- step x
         pure (reverse (t : acc), b)

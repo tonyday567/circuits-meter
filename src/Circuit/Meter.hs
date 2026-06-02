@@ -24,11 +24,6 @@ module Circuit.Meter
     enter,
     exit,
     withMeter,
-    meterC,
-    meterA,
-    meterArr,
-    (◅),
-    (▻),
     -- * Plugin metering
     meterAction,
     meterPure,
@@ -159,40 +154,19 @@ infixl 5 ▻
 c ▻ m = Lift (dimap id snd (first' (stop m))) . c
 {-# INLINE (▻) #-}
 
--- | Apply a 'Meter' to a 'Circuit', keeping the measurement.
-meterC :: (Category arr, Strong arr, Trace arr (,)) => Meter arr a b -> Circuit arr (,) c d -> Circuit arr (,) c (b, d)
-meterC m c = withMeter m (ambient c)
-{-# INLINEABLE meterC #-}
-
--- | Apply a 'Meter' to an arrow, keeping the measurement.
---
--- Only requires 'Arrow', not 'Trace', making it usable with any tensor
--- once the result is lifted into a 'Circuit'.
---
--- @
---   meterA m k = (arr (const ()) >>> start m) &&& k >>> first (stop m)
--- @
-meterA :: (Arrow arr) => Meter arr a b -> arr c d -> arr c (b, d)
-meterA = meterArr
-{-# INLINEABLE meterA #-}
-
--- | Low-level arrow metering.  Brackets a single arrow with a meter's
--- 'start' and 'stop', pairing the measurement with the result.
---
--- This is the primitive behind 'meterA': it needs only 'Arrow',
--- whereas 'meterC' / 'meterAction' need 'Trace arr (,)' because they
--- thread the meter state through an entire 'Circuit' via 'ambient'.
-meterArr :: (Arrow arr) => Meter arr a b -> arr c d -> arr c (b, d)
-meterArr m k = (arr (const ()) >>> start m) &&& k >>> first (stop m)
-{-# INLINEABLE meterArr #-}
-
 -- ---------------------------------------------------------------------------
 -- Plugin metering
 -- ---------------------------------------------------------------------------
 
--- | Meter a monadic action.  Plugin-level combinator.
-meterAction :: (Category arr, Strong arr, Trace arr (,)) => Meter arr a b -> arr c d -> Circuit arr (,) c (b, d)
-meterAction m = withMeter m . ambient . Lift
+-- | Meter an arrow action, keeping the measurement.
+--
+-- Tensor-agnostic: only needs 'Category' + 'Strong', not 'Trace'.
+-- The meter state is introduced and consumed locally; the result is
+-- a 'Circuit' polymorphic in the tensor @t@.
+--
+-- For arrow-level extraction, use 'reify' with your chosen tensor.
+meterAction :: (Category arr, Strong arr) => Meter arr a b -> arr c d -> Circuit arr t c (b, d)
+meterAction m k = withMeter m (Lift (second' k))
 {-# INLINEABLE meterAction #-}
 
 -- | Meter a pure function.  Forces to NF inside the bracket.
@@ -208,7 +182,7 @@ meterAction m = withMeter m . ambient . Lift
 -- >>> runKleisli (reify (meterPure m (+1))) (5::Int)
 -- Identity (1,6)
 meterPure :: (Monad m, NFData d) => Meter (Kleisli m) a b -> (c -> d) -> Circuit (Kleisli m) t c (b, d)
-meterPure m f = Lift (meterA m (Kleisli (pure . force . f . hold)))
+meterPure m f = meterAction m (Kleisli (pure . force . f . hold))
 {-# INLINEABLE meterPure #-}
 
 -- | Hold back a value so GHC cannot float a function application past
