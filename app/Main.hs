@@ -7,7 +7,7 @@
 --   1. clock overhead  — raw MonotonicRaw resolution
 --   2. whileM_         — control group: IORef + whileM_
 --   3. trace-delim     — Trace (Kleisli IO) Either: iterate until Right
---   4. meterK-loop     — same loop measured with 'Circuit.Meter.meterK'
+--   4. meterA-loop     — same loop measured with 'Circuit.Meter.meterA'
 --
 -- The last item demonstrates the new API: a 'Meter' wrapped around
 -- the delimited-continuation loop, producing per-iteration timings
@@ -148,10 +148,10 @@ benchTrace cfg = do
     pure (t1 - t0)
 
 -- ---------------------------------------------------------------------------
--- Benchmark 4: meterK on the trace loop
+-- Benchmark 4: meterA on the trace loop
 -- ---------------------------------------------------------------------------
 
--- | The trace loop wrapped in a 'Meter'. 'meterK timeM' adds clock
+-- | The trace loop wrapped in a 'Meter'. 'meterA timeM' adds clock
 -- reads before and after each call to 'runKleisli (trace ...)'. The
 -- 'timesK' combinator then iterates this measured arrow.
 benchMeterK :: Config -> IO [Nanos]
@@ -175,7 +175,7 @@ benchBoth cfg = do
       let target = cfgTraceTarget cfg
           meterBoth = both timeM allocM
           kaction = Kleisli (\() -> runTrace target)
-      ((dt, alloc), _r) <- runKleisli (meterK meterBoth kaction) ()
+      ((dt, alloc), _r) <- runKleisli (meterA meterBoth kaction) ()
       putStrLn $
         "time+space: time="
           <> fmt dt
@@ -218,10 +218,10 @@ main = do
   report "trace-delim" ts
   putStrLn ""
 
-  -- meterK on trace
-  putStrLn "4. meterK + timesK (circuit perf API)"
+  -- meterA on trace
+  putStrLn "4. meterA + timesK (circuit perf API)"
   ms <- benchMeterK cfg
-  report "meterK" ms
+  report "meterA" ms
   putStrLn ""
 
   -- simultaneous time + space (single shot, not repeated)
