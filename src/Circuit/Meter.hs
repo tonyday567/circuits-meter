@@ -10,20 +10,18 @@
 -- The base arrow @arr@ is a type parameter: 'IO' only appears when you
 -- instantiate @arr@ to 'Kleisli' 'IO'.  This makes 'Meter' reusable for
 -- any 'Strong' arrow.
---
 module Circuit.Meter
   ( -- * Meter
     Meter (..),
-
     mkMeter,
 
     -- * Meter composition
     (≫),
     both,
-
     enter,
     exit,
     withMeter,
+
     -- * Plugin metering
     meterAction,
     meterPure,
@@ -41,7 +39,6 @@ import Control.Category
 import Control.DeepSeq
 -- import Control.Monad.Fix (MonadFix)
 import Data.Profunctor
-
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
@@ -70,7 +67,7 @@ data Meter arr a b = Meter
   }
 
 instance NFData (Meter arr a b) where
-  rnf Meter{} = ()
+  rnf Meter {} = ()
 
 -- | Construct a 'Meter' from raw monadic actions.
 mkMeter :: m a -> (a -> m b) -> Meter (Kleisli m) a b
