@@ -23,7 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run ormolu
-        run: echo "ormolu disabled"
+        run: |
+          ormolu --mode check $(git ls-files '*.hs')
   build:
     name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
