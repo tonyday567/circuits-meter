@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE CPP #-}
 
 -- | Time measurement as a Circuit.
 --
@@ -59,10 +60,17 @@ import Prelude hiding (id, (.))
 -- | Nanoseconds as an integral count.
 type Nanos = Integer
 
--- | Read the monotonic raw clock. Absolute value is not meaningful;
+-- | Read the monotonic clock. Absolute value is not meaningful;
 -- use deltas between readings.
+--
+-- On Linux/macOS we use 'MonotonicRaw' for NTP-frequency-adjustment-free
+-- timing; on Windows we fall back to the portable 'Monotonic' clock.
 nanos :: IO Nanos
+#ifdef mingw32_HOST_OS
 nanos = toNanoSecs <$> getTime Monotonic
+#else
+nanos = toNanoSecs <$> getTime MonotonicRaw
+#endif
 {-# INLINE nanos #-}
 
 -- ---------------------------------------------------------------------------
