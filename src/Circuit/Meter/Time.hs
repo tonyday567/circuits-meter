@@ -96,7 +96,7 @@ timeM =
 -- | Measure a single call to a pure function. Forces the result to NF
 -- inside the timed 'IO' action so the work cannot be floated out.
 once :: (NFData d) => Meter (Kleisli IO) a b -> (c -> d) -> c -> IO (b, d)
-once m f c = runKleisli (reifyC (meterAction m (Kleisli (evaluate . force . f . hold)))) c
+once m f = runKleisli (reifyC (meterAction m (Kleisli (evaluate . force . f . hold))))
 {-# INLINEABLE once #-}
 
 -- | Measure a single call, discarding the result.
@@ -106,7 +106,7 @@ once_ m f a = fst <$> once m f a
 
 -- | Measure a single call to a Kleisli arrow.
 onceK :: (MonadFix m) => Meter (Kleisli m) a b -> Kleisli m c d -> c -> m (b, d)
-onceK m k c = runKleisli (reifyC (meterAction m k)) c
+onceK m k = runKleisli (reifyC (meterAction m k))
 {-# INLINEABLE onceK #-}
 
 -- | Reify a circuit using the cartesian tensor @(,)@.
