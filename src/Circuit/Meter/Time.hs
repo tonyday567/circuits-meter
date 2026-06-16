@@ -62,7 +62,7 @@ type Nanos = Integer
 -- | Read the monotonic raw clock. Absolute value is not meaningful;
 -- use deltas between readings.
 nanos :: IO Nanos
-nanos = toNanoSecs <$> getTime MonotonicRaw
+nanos = toNanoSecs <$> getTime Monotonic
 {-# INLINE nanos #-}
 
 -- ---------------------------------------------------------------------------
