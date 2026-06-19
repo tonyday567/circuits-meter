@@ -84,9 +84,10 @@ nanos = toNanoSecs <$> getTime MonotonicRaw
 -- 'stop' reads the current clock and subtracts.  Calling 'stop' multiple
 -- times gives cumulative elapsed time since the single start.
 --
+-- >>> import Circuit (Trace, realise)
 -- >>> import Control.Arrow (Kleisli(..), runKleisli)
--- >>> import Circuit.Meter (meterA)
--- >>> runKleisli (meterA timeM (Kleisli (pure . (*2)))) 5
+-- >>> import Circuit.Meter (meterAction)
+-- >>> runKleisli (realise (meterAction timeM (Kleisli (pure . (*2))) :: Trace (,) (Kleisli IO) Int (Nanos, Int))) 5
 -- (...,10)
 timeM :: Meter (Kleisli IO) Nanos Nanos
 timeM =

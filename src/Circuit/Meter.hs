@@ -172,11 +172,11 @@ meterAction m k = withMeter m (Lift (second' k))
 -- the work outside the meter bracket.  For 'IO'-based benchmarking use
 -- 'Circuit.Meter.Time.meter' instead, which forces inside 'IO'.
 --
--- >>> import Circuit (realise)
+-- >>> import Circuit (Trace, realise)
 -- >>> import Control.Arrow (Kleisli(..), runKleisli)
 -- >>> import Data.Functor.Identity
 -- >>> let m = Meter (Kleisli (\_ -> Identity (0::Int))) (Kleisli (\_ -> Identity (1::Int)))
--- >>> runKleisli (realise (meterPure m (+1))) (5::Int)
+-- >>> runKleisli (realise (meterPure m (+1) :: Trace (,) (Kleisli Identity) Int (Int, Int))) (5::Int)
 -- Identity (1,6)
 meterPure :: (Monad m, NFData d) => Meter (Kleisli m) a b -> (c -> d) -> Trace t (Kleisli m) c (b, d)
 meterPure m f = meterAction m (Kleisli (pure . force . f . hold))
