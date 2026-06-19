@@ -44,6 +44,7 @@ where
 
 import Circuit
 import Circuit.Meter
+import Circuit.Traced (Traced)
 import Control.Arrow
 import Control.Category (Category, (.))
 import Control.DeepSeq
@@ -121,7 +122,7 @@ onceK m k = runKleisli (reifyC (meterAction m k))
 --
 -- Convenience alias for 'reify' with @t = (,)@, used by the runners
 -- below to extract a 'Kleisli' from a metered circuit.
-reifyC :: (Category arr, Trace arr (,)) => Circuit arr (,) a b -> arr a b
+reifyC :: (Category arr, Traced arr (,)) => Trace (,) arr a b -> arr a b
 reifyC = reify
 {-# INLINE reifyC #-}
 
@@ -165,13 +166,13 @@ ticksN n f a = do
 -- The result is a 'Circuit' polymorphic in the tensor @t@, so it can
 -- be lifted into pipelines using either @(,)@ (lazy knot-tying) or
 -- 'Either' (iteration) without changing the combinator.
-meterIO :: (a -> IO b) -> Circuit (Kleisli IO) t a (Nanos, b)
+meterIO :: (a -> IO b) -> Trace t (Kleisli IO) a (Nanos, b)
 meterIO f = meterAction timeM (Kleisli f)
 {-# INLINEABLE meterIO #-}
 
 -- | Meter a pure function with 'timeM'. Forces to NF inside the timed
 -- bracket so the work cannot be floated out.
-meter :: (NFData b) => (a -> b) -> Circuit (Kleisli IO) t a (Nanos, b)
+meter :: (NFData b) => (a -> b) -> Trace t (Kleisli IO) a (Nanos, b)
 meter f = meterAction timeM (Kleisli (evaluate . force . f . hold))
 {-# INLINEABLE meter #-}
 

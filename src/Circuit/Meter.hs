@@ -31,9 +31,9 @@ module Circuit.Meter
   )
 where
 
-import Circuit.Circuit
 import Circuit.Monoidal (ambient)
-import Circuit.Traced (Trace)
+import Circuit.Trace
+import Circuit.Traced (Traced)
 import Control.Arrow
 import Control.Category
 import Control.DeepSeq
@@ -106,7 +106,7 @@ both m1 m2 =
 -- Derived from 'start' via the 'Strong' profunctor law.  Tensor-agnostic:
 -- the implementation is just 'Lift', so @t@ can be any tensor.  The
 -- value-level pairing @(a, c)@ comes from 'Strong'.
-enter :: (Strong arr) => Meter arr a b -> Circuit arr t c (a, c)
+enter :: (Strong arr) => Meter arr a b -> Trace t arr c (a, c)
 enter m = Lift (dimap ((),) id (first' (start m)))
 {-# INLINEABLE enter #-}
 
@@ -114,7 +114,7 @@ enter m = Lift (dimap ((),) id (first' (start m)))
 --
 -- Derived from 'stop' via 'first''.  Tensor-agnostic: the
 -- implementation is just 'Lift'.
-exit :: (Strong arr) => Meter arr a b -> Circuit arr t (a, c) (b, c)
+exit :: (Strong arr) => Meter arr a b -> Trace t arr (a, c) (b, c)
 exit = Lift . first' . stop
 {-# INLINEABLE exit #-}
 
@@ -123,7 +123,7 @@ exit = Lift . first' . stop
 -- Tensor-agnostic: the implementation is just sequential 'Compose',
 -- so @t@ can be any tensor. The value-level pairing @(a, c)@ comes
 -- from 'Strong' via 'enter' and 'exit'.
-withMeter :: (Category arr, Strong arr) => Meter arr a b -> Circuit arr t (a, c) (a, d) -> Circuit arr t c (b, d)
+withMeter :: (Category arr, Strong arr) => Meter arr a b -> Trace t arr (a, c) (a, d) -> Trace t arr c (b, d)
 withMeter m inner = exit m . inner . enter m
 {-# INLINEABLE withMeter #-}
 
@@ -135,7 +135,7 @@ withMeter m inner = exit m . inner . enter m
 -- @
 infixl 5 ◅
 
-(◅) :: (Category arr, Strong arr, Trace arr (,)) => Meter arr a b -> Circuit arr (,) c d -> Circuit arr (,) c (a, d)
+(◅) :: (Category arr, Strong arr, Traced arr (,)) => Meter arr a b -> Trace (,) arr c d -> Trace (,) arr c (a, d)
 m ◅ c = ambient c . enter m
 {-# INLINE (◅) #-}
 
@@ -147,7 +147,7 @@ m ◅ c = ambient c . enter m
 -- @
 infixl 5 ▻
 
-(▻) :: (Category arr, Strong arr) => Circuit arr t c (a, d) -> Meter arr a b -> Circuit arr t c d
+(▻) :: (Category arr, Strong arr) => Trace t arr c (a, d) -> Meter arr a b -> Trace t arr c d
 c ▻ m = Lift (dimap id snd (first' (stop m))) . c
 {-# INLINE (▻) #-}
 
@@ -162,7 +162,7 @@ c ▻ m = Lift (dimap id snd (first' (stop m))) . c
 -- a 'Circuit' polymorphic in the tensor @t@.
 --
 -- For arrow-level extraction, use 'reify' with your chosen tensor.
-meterAction :: (Category arr, Strong arr) => Meter arr a b -> arr c d -> Circuit arr t c (b, d)
+meterAction :: (Category arr, Strong arr) => Meter arr a b -> arr c d -> Trace t arr c (b, d)
 meterAction m k = withMeter m (Lift (second' k))
 {-# INLINEABLE meterAction #-}
 
@@ -178,7 +178,7 @@ meterAction m k = withMeter m (Lift (second' k))
 -- >>> let m = Meter (Kleisli (\_ -> Identity (0::Int))) (Kleisli (\_ -> Identity (1::Int)))
 -- >>> runKleisli (reify (meterPure m (+1))) (5::Int)
 -- Identity (1,6)
-meterPure :: (Monad m, NFData d) => Meter (Kleisli m) a b -> (c -> d) -> Circuit (Kleisli m) t c (b, d)
+meterPure :: (Monad m, NFData d) => Meter (Kleisli m) a b -> (c -> d) -> Trace t (Kleisli m) c (b, d)
 meterPure m f = meterAction m (Kleisli (pure . force . f . hold))
 {-# INLINEABLE meterPure #-}
 
