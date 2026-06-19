@@ -120,10 +120,10 @@ onceK m k = runKleisli (reifyC (meterAction m k))
 
 -- | Reify a circuit using the cartesian tensor @(,)@.
 --
--- Convenience alias for 'reify' with @t = (,)@, used by the runners
+-- Convenience alias for 'realise' with @t = (,)@, used by the runners
 -- below to extract a 'Kleisli' from a metered circuit.
 reifyC :: (Category arr, Traced arr (,)) => Trace (,) arr a b -> arr a b
-reifyC = reify
+reifyC = realise
 {-# INLINE reifyC #-}
 
 -- | Single timing of a pure function. Returns @(nanos, result)@.

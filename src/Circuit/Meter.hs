@@ -161,7 +161,7 @@ c ▻ m = Lift (dimap id snd (first' (stop m))) . c
 -- The meter state is introduced and consumed locally; the result is
 -- a 'Circuit' polymorphic in the tensor @t@.
 --
--- For arrow-level extraction, use 'reify' with your chosen tensor.
+-- For arrow-level extraction, use 'realise' with your chosen tensor.
 meterAction :: (Category arr, Strong arr) => Meter arr a b -> arr c d -> Trace t arr c (b, d)
 meterAction m k = withMeter m (Lift (second' k))
 {-# INLINEABLE meterAction #-}
@@ -172,11 +172,11 @@ meterAction m k = withMeter m (Lift (second' k))
 -- the work outside the meter bracket.  For 'IO'-based benchmarking use
 -- 'Circuit.Meter.Time.meter' instead, which forces inside 'IO'.
 --
--- >>> import Circuit (reify)
+-- >>> import Circuit (realise)
 -- >>> import Control.Arrow (Kleisli(..), runKleisli)
 -- >>> import Data.Functor.Identity
 -- >>> let m = Meter (Kleisli (\_ -> Identity (0::Int))) (Kleisli (\_ -> Identity (1::Int)))
--- >>> runKleisli (reify (meterPure m (+1))) (5::Int)
+-- >>> runKleisli (realise (meterPure m (+1))) (5::Int)
 -- Identity (1,6)
 meterPure :: (Monad m, NFData d) => Meter (Kleisli m) a b -> (c -> d) -> Trace t (Kleisli m) c (b, d)
 meterPure m f = meterAction m (Kleisli (pure . force . f . hold))
