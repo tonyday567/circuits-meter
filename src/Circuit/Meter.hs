@@ -31,14 +31,16 @@ module Circuit.Meter
   )
 where
 
-import Circuit.Monoidal (ambient)
+import Circuit.Monoidal (ambient, Braided)
 import Circuit.Trace
 import Circuit.Traced (Traced)
+import Circuit.Action (Costrong (..))
+import Circuit.Action qualified as CA
 import Control.Arrow
 import Control.Category
 import Control.DeepSeq
 -- import Control.Monad.Fix (MonadFix)
-import Data.Profunctor
+import Data.Profunctor hiding (Costrong)
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
@@ -135,7 +137,7 @@ withMeter m inner = exit m . inner . enter m
 -- @
 infixl 5 ◅
 
-(◅) :: (Category arr, Strong arr, Traced arr (,)) => Meter arr a b -> Trace (,) arr c d -> Trace (,) arr c (a, d)
+(◅) :: (Category arr, Strong arr, CA.Strong (,) arr, Costrong (,) arr, Traced arr (,), Braided (,)) => Meter arr a b -> Trace (,) arr c d -> Trace (,) arr c (a, d)
 m ◅ c = ambient c . enter m
 {-# INLINE (◅) #-}
 

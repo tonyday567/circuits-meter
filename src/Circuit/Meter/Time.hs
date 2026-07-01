@@ -54,7 +54,9 @@ where
 
 import Circuit
 import Circuit.Meter
-import Circuit.Traced (Traced)
+import Circuit.Traced (Traced, cellIO)
+import Circuit.Action (Costrong (..))
+import Circuit.Action qualified as CA
 import Control.Arrow
 import Control.Category (Category, (.))
 import Control.DeepSeq
@@ -133,7 +135,7 @@ onceK m k = runKleisli (reifyC (meterAction m k))
 --
 -- Convenience alias for 'realise' with @t = (,)@, used by the runners
 -- below to extract a 'Kleisli' from a metered circuit.
-reifyC :: (Category arr, Traced arr (,)) => Trace (,) arr a b -> arr a b
+reifyC :: (Category arr, CA.Strong (,) arr, Costrong (,) arr, Traced arr (,)) => Trace (,) arr a b -> arr a b
 reifyC = realise
 {-# INLINE reifyC #-}
 
