@@ -1,3 +1,14 @@
 cabal.project.local
 dist-newstyle/
 .ghc.environment.*
+
+# C reference benchmark binaries
+other/c_baseline
+other/c_baseline_novec
+other/c_baseline_o0
+other/c_funcapp
+
+# local build artifacts
+*.o
+*.hi
+*.dump-simpl

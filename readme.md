@@ -25,5 +25,14 @@ For raw per-run distributions, use `ticks` (pure) or `timesK` (Kleisli).
 For custom meters, build a `Meter` with `mkMeter` and wrap an arrow with
 `meterAction`.
 
+## Baseline / calibration
+
+`cabal run baseline` exercises a ladder of micro-benchmarks:
+function-application floor, list primitives, polymorphism cost, and the
+state-hiding (skolem) effect used by `foldl` / `Mealy`.
+
+`examples/baseline-analytics.md` contains the calibrated numbers plus the
+GHC Core for the tight sum loop and a C reference calibration.
+
 See also [perf-circuits](https://github.com/tonyday567/perf-circuits), the
 sibling repo with larger-scale circuit performance examples.
