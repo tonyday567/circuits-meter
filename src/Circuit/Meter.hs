@@ -21,6 +21,8 @@ module Circuit.Meter
     enter,
     exit,
     withMeter,
+    (◅),
+    (▻),
 
     -- * Plugin metering
     meterAction,
@@ -31,16 +33,14 @@ module Circuit.Meter
   )
 where
 
-import Circuit.Monoidal (ambient, Braided)
+import Circuit.Monoidal (ambient)
 import Circuit.Trace
-import Circuit.Traced (Traced)
-import Circuit.Action (Costrong (..))
-import Circuit.Action qualified as CA
+import Circuit.Trace (Traced)
 import Control.Arrow
 import Control.Category
 import Control.DeepSeq
 -- import Control.Monad.Fix (MonadFix)
-import Data.Profunctor hiding (Costrong)
+import Data.Profunctor
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
@@ -57,8 +57,8 @@ import Prelude hiding (id, (.))
 -- The bracketing wires are derived via 'Strong' profunctor laws:
 --
 -- @
---   enter = Lift (dimap (,()) swap (second' (start m)))
---   exit  = Lift (first' (stop m))
+--   enter = Arr (dimap (,()) swap (second' (start m)))
+--   exit  = Arr (first' (stop m))
 -- @
 --
 -- Sequential composition chains the terminators; parallel composition
@@ -109,23 +109,23 @@ both m1 m2 =
 -- the implementation is just 'Lift', so @t@ can be any tensor.  The
 -- value-level pairing @(a, c)@ comes from 'Strong'.
 enter :: (Strong arr) => Meter arr a b -> Trace t arr c (a, c)
-enter m = Lift (dimap ((),) id (first' (start m)))
+enter m = Arr (dimap ((),) id (first' (start m)))
 {-# INLINEABLE enter #-}
 
 -- | Observe the state wire and pair the measurement with the result.
 --
 -- Derived from 'stop' via 'first''.  Tensor-agnostic: the
--- implementation is just 'Lift'.
+-- implementation is just 'Arr'.
 exit :: (Strong arr) => Meter arr a b -> Trace t arr (a, c) (b, c)
-exit = Lift . first' . stop
+exit = Arr . first' . stop
 {-# INLINEABLE exit #-}
 
 -- | Bracket an inner circuit with a meter.  Pure composition.
 --
--- Tensor-agnostic: the implementation is just sequential 'Compose',
--- so @t@ can be any tensor. The value-level pairing @(a, c)@ comes
--- from 'Strong' via 'enter' and 'exit'.
-withMeter :: (Category arr, Strong arr) => Meter arr a b -> Trace t arr (a, c) (a, d) -> Trace t arr c (b, d)
+-- Tensor-agnostic: the implementation is sequential composition in
+-- 'Trace', so @t@ can be any tensor. The value-level pairing @(a, c)@
+-- comes from 'Strong' via 'enter' and 'exit'.
+withMeter :: (Category arr, Strong arr, Traced t arr) => Meter arr a b -> Trace t arr (a, c) (a, d) -> Trace t arr c (b, d)
 withMeter m inner = exit m . inner . enter m
 {-# INLINEABLE withMeter #-}
 
@@ -137,7 +137,7 @@ withMeter m inner = exit m . inner . enter m
 -- @
 infixl 5 ◅
 
-(◅) :: (Category arr, Strong arr, CA.Strong (,) arr, Costrong (,) arr, Traced arr (,), Braided (,)) => Meter arr a b -> Trace (,) arr c d -> Trace (,) arr c (a, d)
+(◅) :: (Category arr, Strong arr, Traced (,) arr) => Meter arr a b -> Trace (,) arr c d -> Trace (,) arr c (a, d)
 m ◅ c = ambient c . enter m
 {-# INLINE (◅) #-}
 
@@ -149,8 +149,8 @@ m ◅ c = ambient c . enter m
 -- @
 infixl 5 ▻
 
-(▻) :: (Category arr, Strong arr) => Trace t arr c (a, d) -> Meter arr a b -> Trace t arr c d
-c ▻ m = Lift (dimap id snd (first' (stop m))) . c
+(▻) :: (Category arr, Strong arr, Traced t arr) => Trace t arr c (a, d) -> Meter arr a b -> Trace t arr c d
+c ▻ m = Arr (dimap id snd (first' (stop m))) . c
 {-# INLINE (▻) #-}
 
 -- ---------------------------------------------------------------------------
@@ -159,13 +159,15 @@ c ▻ m = Lift (dimap id snd (first' (stop m))) . c
 
 -- | Meter an arrow action, keeping the measurement.
 --
--- Tensor-agnostic: only needs 'Category' + 'Strong', not 'Trace'.
+-- Tensor-agnostic: the bracket is built directly in the base arrow
+-- and lifted with 'Arr', so it only needs 'Category' + 'Strong'.
 -- The meter state is introduced and consumed locally; the result is
 -- a 'Circuit' polymorphic in the tensor @t@.
 --
--- For arrow-level extraction, use 'realise' with your chosen tensor.
+-- For arrow-level extraction, use 'run' with your chosen tensor.
 meterAction :: (Category arr, Strong arr) => Meter arr a b -> arr c d -> Trace t arr c (b, d)
-meterAction m k = withMeter m (Lift (second' k))
+meterAction m k =
+  Arr (first' (stop m) . second' k . dimap ((),) id (first' (start m)))
 {-# INLINEABLE meterAction #-}
 
 -- | Meter a pure function.  Forces to NF inside the bracket.
@@ -174,11 +176,11 @@ meterAction m k = withMeter m (Lift (second' k))
 -- the work outside the meter bracket.  For 'IO'-based benchmarking use
 -- 'Circuit.Meter.Time.meter' instead, which forces inside 'IO'.
 --
--- >>> import Circuit (Trace, realise)
+-- >>> import Circuit (Trace, run)
 -- >>> import Control.Arrow (Kleisli(..), runKleisli)
 -- >>> import Data.Functor.Identity
 -- >>> let m = Meter (Kleisli (\_ -> Identity (0::Int))) (Kleisli (\_ -> Identity (1::Int)))
--- >>> runKleisli (realise (meterPure m (+1) :: Trace (,) (Kleisli Identity) Int (Int, Int))) (5::Int)
+-- >>> runKleisli (run (meterPure m (+1) :: Trace (,) (Kleisli Identity) Int (Int, Int))) (5::Int)
 -- Identity (1,6)
 meterPure :: (Monad m, NFData d) => Meter (Kleisli m) a b -> (c -> d) -> Trace t (Kleisli m) c (b, d)
 meterPure m f = meterAction m (Kleisli (pure . force . f . hold))

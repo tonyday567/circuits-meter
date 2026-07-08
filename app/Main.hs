@@ -20,7 +20,7 @@ module Main where
 import Circuit.Meter
 import Circuit.Meter.Space
 import Circuit.Meter.Time
-import Circuit.Traced (Traced (..))
+import Circuit.Trace (trace)
 import Control.Arrow hiding (loop)
 import Control.Exception
 import Control.Monad

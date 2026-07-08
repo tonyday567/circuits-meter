@@ -54,9 +54,7 @@ where
 
 import Circuit
 import Circuit.Meter
-import Circuit.Traced (Traced, cellIO)
-import Circuit.Action (Costrong (..))
-import Circuit.Action qualified as CA
+import Circuit.Trace (Traced)
 import Control.Arrow
 import Control.Category (Category, (.))
 import Control.DeepSeq
@@ -96,10 +94,10 @@ nanos = toNanoSecs <$> getTime MonotonicRaw
 -- 'stop' reads the current clock and subtracts.  Calling 'stop' multiple
 -- times gives cumulative elapsed time since the single start.
 --
--- >>> import Circuit (Trace, realise)
+-- >>> import Circuit (Trace, run)
 -- >>> import Control.Arrow (Kleisli(..), runKleisli)
 -- >>> import Circuit.Meter (meterAction)
--- >>> runKleisli (realise (meterAction timeM (Kleisli (pure . (*2))) :: Trace (,) (Kleisli IO) Int (Nanos, Int))) 5
+-- >>> runKleisli (run (meterAction timeM (Kleisli (pure . (*2))) :: Trace (,) (Kleisli IO) Int (Nanos, Int))) 5
 -- (...,10)
 timeM :: Meter (Kleisli IO) Nanos Nanos
 timeM =
@@ -133,10 +131,10 @@ onceK m k = runKleisli (reifyC (meterAction m k))
 
 -- | Reify a circuit using the cartesian tensor @(,)@.
 --
--- Convenience alias for 'realise' with @t = (,)@, used by the runners
+-- Convenience alias for 'run' with @t = (,)@, used by the runners
 -- below to extract a 'Kleisli' from a metered circuit.
-reifyC :: (Category arr, CA.Strong (,) arr, Costrong (,) arr, Traced arr (,)) => Trace (,) arr a b -> arr a b
-reifyC = realise
+reifyC :: (Category arr, Traced (,) arr) => Trace (,) arr a b -> arr a b
+reifyC = run
 {-# INLINE reifyC #-}
 
 -- | Single timing of a pure function. Returns @(nanos, result)@.
