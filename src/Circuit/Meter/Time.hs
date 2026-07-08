@@ -13,20 +13,12 @@ module Circuit.Meter.Time
 
     -- * Single timing
     tick,
-    tickForce,
 
     -- * Repeated timing
     ticks,
     ticksN,
 
-    -- * Stateful repeated timing
-    tickState,
-    ticksState,
-    ticksStateN,
-
     -- * IO repeated timing
-    tickIO,
-    ticksIO,
     ticksION,
 
     -- * Plugin metering
@@ -35,26 +27,21 @@ module Circuit.Meter.Time
 
     -- * Warmup
     warmup,
-    warmupK,
 
     -- * Reify helper
     reifyC,
 
     -- * Single-shot measurement runners
     once,
-    once_,
     onceK,
 
     -- * Repeated measurement runners
     timesK,
-    timesC,
-    times_,
   )
 where
 
 import Circuit
 import Circuit.Meter
-import Circuit.Trace (Traced)
 import Control.Arrow
 import Control.Category (Category, (.))
 import Control.DeepSeq
@@ -93,12 +80,6 @@ nanos = toNanoSecs <$> getTime MonotonicRaw
 -- This is a stopwatch: 'start' captures the initial time, and each
 -- 'stop' reads the current clock and subtracts.  Calling 'stop' multiple
 -- times gives cumulative elapsed time since the single start.
---
--- >>> import Circuit (Trace, run)
--- >>> import Control.Arrow (Kleisli(..), runKleisli)
--- >>> import Circuit.Meter (meterAction)
--- >>> runKleisli (run (meterAction timeM (Kleisli (pure . (*2))) :: Trace (,) (Kleisli IO) Int (Nanos, Int))) 5
--- (...,10)
 timeM :: Meter (Kleisli IO) Nanos Nanos
 timeM =
   mkMeter
@@ -119,11 +100,6 @@ once :: (NFData d) => Meter (Kleisli IO) a b -> (c -> d) -> c -> IO (b, d)
 once m f = runKleisli (reifyC (meterAction m (Kleisli (evaluate . force . f . hold))))
 {-# INLINEABLE once #-}
 
--- | Measure a single call, discarding the result.
-once_ :: (NFData d) => Meter (Kleisli IO) a b -> (c -> d) -> c -> IO b
-once_ m f a = fst <$> once m f a
-{-# INLINEABLE once_ #-}
-
 -- | Measure a single call to a Kleisli arrow.
 onceK :: (MonadFix m) => Meter (Kleisli m) a b -> Kleisli m c d -> c -> m (b, d)
 onceK m k = runKleisli (reifyC (meterAction m k))
@@ -135,20 +111,12 @@ onceK m k = runKleisli (reifyC (meterAction m k))
 -- below to extract a 'Kleisli' from a metered circuit.
 reifyC :: (Category arr, Traced (,) arr) => Trace (,) arr a b -> arr a b
 reifyC = run
-{-# INLINE reifyC #-}
+{-# INLINEABLE reifyC #-}
 
 -- | Single timing of a pure function. Returns @(nanos, result)@.
 tick :: (NFData b) => (a -> b) -> a -> IO (Nanos, b)
 tick = once timeM
 {-# INLINEABLE tick #-}
-
--- | Single timing with deep forcing of argument and result.
-tickForce :: (NFData a, NFData b) => (a -> b) -> a -> IO (Nanos, b)
-tickForce f a = do
-  let !f' = force f
-      !a' = force a
-  once timeM f' a'
-{-# INLINEABLE tickForce #-}
 
 -- ---------------------------------------------------------------------------
 -- Repeated timing
@@ -169,80 +137,11 @@ ticksN n f a = do
 {-# INLINEABLE ticksN #-}
 
 -- ---------------------------------------------------------------------------
--- Stateful repeated timing
--- ---------------------------------------------------------------------------
-
--- | Single timing of a stateful pure step.
---
--- The state is threaded through the timed computation, so the work
--- cannot be memoized across calls: each call sees a different input.
--- Useful for benchmarking functions over a stream of distinct values.
-tickState :: (NFData s, NFData d) => (s -> (s, d)) -> s -> IO (Nanos, s, d)
-tickState f !s0 = do
-  t0 <- nanos
-  let (!s1, !d) = f s0
-  !d' <- evaluate (force d)
-  t1 <- nanos
-  pure (t1 - t0, s1, d')
-{-# INLINEABLE tickState #-}
-
--- | @n@ timings of a stateful pure step, with a default 100-iteration
--- warmup.  Returns the list of per-iteration timings, the final state,
--- and the result of the last iteration.
-ticksState :: (NFData s, NFData d) => Int -> (s -> (s, d)) -> s -> IO ([Nanos], s, d)
-ticksState = ticksStateWithWarmup 100
-{-# INLINEABLE ticksState #-}
-
--- | @n@ timings of a stateful pure step with explicit warmup count.
-ticksStateWithWarmup :: (NFData s, NFData d) => Int -> Int -> (s -> (s, d)) -> s -> IO ([Nanos], s, d)
-ticksStateWithWarmup w n f !s0 = do
-  !sW <- warmupState w s0
-  (sF, pairs) <- measure n sW []
-  let (ts, ds) = unzip (reverse pairs)
-  case ds of
-    [] -> error "ticksStateWithWarmup: zero measurement iterations"
-    _ -> pure (ts, sF, last ds)
-  where
-    warmupState 0 !s = pure s
-    warmupState i !s = do
-      let (!s', !d) = f s
-      !_ <- evaluate (force d)
-      warmupState (i - 1) s'
-    measure 0 !s acc = pure (s, acc)
-    measure i !s acc = do
-      t0 <- nanos
-      let (!s', !d) = f s
-      !d' <- evaluate (force d)
-      t1 <- nanos
-      measure (i - 1) s' ((t1 - t0, d') : acc)
-{-# INLINEABLE ticksStateWithWarmup #-}
-
--- | @n@ stateful timings collapsed to a single average nanosecond count.
-ticksStateN :: (NFData s, NFData d) => Int -> (s -> (s, d)) -> s -> IO (Nanos, s, d)
-ticksStateN n f s0 = do
-  (ts, s, d) <- ticksState n f s0
-  pure (sum ts `div` fromIntegral n, s, d)
-{-# INLINEABLE ticksStateN #-}
-
--- ---------------------------------------------------------------------------
 -- IO repeated timing
 -- ---------------------------------------------------------------------------
 
--- | Single timing of an 'IO' action.
---
--- Because the action lives in 'IO', GHC cannot float pure work out of
--- the timing bracket. Use this when benchmarking code that naturally
--- returns a result or when you want to thread an 'IORef' through the
--- iterations to defeat memoisation.
-tickIO :: IO a -> IO (Nanos, a)
-tickIO action = do
-  t0 <- nanos
-  !a <- action
-  t1 <- nanos
-  pure (t1 - t0, a)
-{-# INLINEABLE tickIO #-}
-
 -- | @n@ timings of an 'IO' action with a default 100-iteration warmup.
+-- Returns @( [nanos], lastResult )@.
 ticksIO :: Int -> IO a -> IO ([Nanos], a)
 ticksIO = ticksIOWithWarmup 100
 {-# INLINEABLE ticksIO #-}
@@ -299,15 +198,6 @@ warmup :: Int -> IO ()
 warmup n = replicateM_ n (void nanos)
 {-# INLINE warmup #-}
 
--- | Warmup as a 'Kleisli' circuit. Evaluates the input to WHNF @n@
--- times as a warmup side-effect, then passes it through unchanged.
---
--- This is the identity circuit with a side-effecting prefix — useful
--- for sequencing warmup before measurement in a pipeline.
-warmupK :: Int -> Kleisli IO a a
-warmupK n = Kleisli \a -> replicateM_ n (evaluate a) >> pure a
-{-# INLINEABLE warmupK #-}
-
 -- ---------------------------------------------------------------------------
 -- Repeated measurement runners
 -- ---------------------------------------------------------------------------
@@ -341,8 +231,3 @@ timesK w n m k = Kleisli \a -> do
 timesC :: (NFData d) => Int -> Meter (Kleisli IO) a b -> (c -> d) -> Kleisli IO c ([b], d)
 timesC n m f = timesK 100 n m (Kleisli (evaluate . force . f . hold))
 {-# INLINEABLE timesC #-}
-
--- | Repeated measurement, discarding results.
-times_ :: (NFData d) => Int -> Meter (Kleisli IO) a b -> (c -> d) -> c -> IO [b]
-times_ n m f a = fst <$> runKleisli (timesC n m f) a
-{-# INLINEABLE times_ #-}
