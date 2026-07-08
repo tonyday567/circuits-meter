@@ -8,6 +8,9 @@ other/c_baseline_novec
 other/c_baseline_o0
 other/c_funcapp
 
+# generated distribution charts
+other/charts/
+
 # local build artifacts
 *.o
 *.hi

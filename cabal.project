@@ -1,6 +1,7 @@
 packages:
   circuits-meter.cabal
   ../circuits/circuits.cabal
+  ../prettychart/prettychart.cabal
 
 constraints:
   circuits >= 0.2

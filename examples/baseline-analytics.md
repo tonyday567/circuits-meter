@@ -10,6 +10,9 @@ Calibration data for Haskell performance measurement using the public
 # Haskell baseline
 cabal run baseline -- --size 100000 --count 10000000 --runs 100
 
+# With distribution charts
+cabal run baseline -- --size 100000 --count 10000000 --runs 100 --chartdir other/charts
+
 # C references
 clang -O2 -o other/c_baseline other/c_baseline.c && other/c_baseline
 clang -O2 -fno-vectorize -fno-slp-vectorize -o other/c_baseline_novec other/c_baseline.c && other/c_baseline_novec

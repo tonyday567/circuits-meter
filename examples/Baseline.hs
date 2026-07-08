@@ -1,5 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Baseline Haskell micro-benchmarks using circuits-meter.
 --
@@ -8,17 +10,25 @@
 -- existential trick).
 --
 -- Run with:
---   cabal run baseline -- --size 100000 --runs 100
+--   cabal run baseline -- --size 100000 --count 10000000 --runs 100
+--   cabal run baseline -- --chartdir other/charts
 module Main where
 
+import Chart hiding (ticks)
 import Circuit.Meter
 import Circuit.Meter.Time
 import Control.Arrow (Kleisli (..), runKleisli)
 import Control.DeepSeq
 import Control.Monad (replicateM_)
+import Data.Foldable (forM_)
 import Data.List qualified as List
 import Data.TDigest
+import Data.Text qualified as Text
+import Optics.Core ((.~), (&))
 import Options.Applicative
+import Prettychart.Charts (hhistChart)
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath ((</>), (<.>))
 import Prelude hiding (sum)
 
 -- ---------------------------------------------------------------------------
@@ -28,7 +38,8 @@ import Prelude hiding (sum)
 data Config = Config
   { cfgSize :: !Int,
     cfgCount :: !Int,
-    cfgRuns :: !Int
+    cfgRuns :: !Int,
+    cfgChartDir :: Maybe FilePath
   }
 
 configP :: Parser Config
@@ -37,6 +48,7 @@ configP =
     <$> option auto (long "size" <> short 'n' <> value 100000 <> help "Input list length")
     <*> option auto (long "count" <> short 'c' <> value 10000000 <> help "Function-call loop count")
     <*> option auto (long "runs" <> short 'r' <> value 100 <> help "Measurement iterations")
+    <*> optional (option str (long "chartdir" <> metavar "DIR" <> help "Write distribution SVGs to DIR"))
 
 -- ---------------------------------------------------------------------------
 -- Inputs
@@ -143,6 +155,11 @@ sumMealy xs = runMealy (Mealy id (+) id) xs
 -- Reporting
 -- ---------------------------------------------------------------------------
 
+data Result = Result
+  { resName :: String,
+    resTimings :: [Nanos]
+  }
+
 fmt :: Nanos -> String
 fmt n = let (v, u) = scaleNanos n in show (round v :: Int) <> u
 
@@ -152,8 +169,8 @@ scaleNanos n
   | n < 1000000 = (fromIntegral n / 1e3, "µs")
   | otherwise = (fromIntegral n / 1e6, "ms")
 
-reportDist :: String -> [Nanos] -> IO ()
-reportDist name ts = do
+reportResult :: Result -> IO ()
+reportResult (Result name ts) = do
   let dig :: TDigest 25
       dig = tdigest (fromIntegral <$> ts)
       p q = maybe "?" fmt (floor <$> quantile q dig :: Maybe Nanos)
@@ -171,20 +188,57 @@ reportDist name ts = do
       <> " max=" <> fmt maxv
       <> " spikes=" <> show spikes
 
-bench :: (NFData b) => String -> Int -> ([Int] -> b) -> [Int] -> IO ()
+bench :: (NFData b) => String -> Int -> ([Int] -> b) -> [Int] -> IO Result
 bench name n f xs = do
   (ts, _) <- ticks n f xs
-  reportDist name ts
+  pure (Result name ts)
 
-benchInt :: (NFData b) => String -> Int -> (Int -> b) -> Int -> IO ()
+benchInt :: (NFData b) => String -> Int -> (Int -> b) -> Int -> IO Result
 benchInt name n f k = do
   (ts, _) <- ticks n f k
-  reportDist name ts
+  pure (Result name ts)
 
-benchIO :: String -> Int -> IO () -> IO ()
+benchIO :: String -> Int -> IO () -> IO Result
 benchIO name n act = do
   (ts, _) <- runKleisli (timesK 0 n timeM (Kleisli (const act))) ()
-  reportDist name ts
+  pure (Result name ts)
+
+-- ---------------------------------------------------------------------------
+-- Chart output
+-- ---------------------------------------------------------------------------
+
+chartResult :: FilePath -> Result -> IO ()
+chartResult dir (Result name ts) = do
+  let xs :: [Double]
+      xs = fromIntegral <$> ts
+      lo = minimum xs
+      hi = maximum xs
+      r = Range (lo - 0.05 * (hi - lo)) (hi + 0.05 * (hi - lo))
+      bins = min 50 (length ts `div` 2)
+      dig :: TDigest 25
+      dig = tdigest xs
+      p50 = maybe "?" (Text.pack . fmt . floor) (quantile 0.5 dig :: Maybe Double)
+      p99 = maybe "?" (Text.pack . fmt . floor) (quantile 0.99 dig :: Maybe Double)
+      title =
+        Text.pack name
+          <> ": p50="
+          <> p50
+          <> " p99="
+          <> p99
+      chart =
+        hhistChart r bins xs
+          & #hudOptions
+            .~ ( defaultHudOptions
+                  & #titles .~ [Priority 5 (defaultTitleOptions title & #buffer .~ 0.04)]
+              )
+  createDirectoryIfMissing True dir
+  writeChartOptions (dir </> map cleanChar name <.> "svg") chart
+  putStrLn $ "  wrote " <> name <> ".svg"
+  where
+    cleanChar c
+      | c == ' ' = '-'
+      | c == ':' = '-'
+      | otherwise = c
 
 -- ---------------------------------------------------------------------------
 -- Main
@@ -202,25 +256,36 @@ main = do
   putStrLn ""
 
   putStrLn "exact function-application floor"
-  benchInt "nothingN" r nothingN c
-  benchInt "constUnitN" r constUnitN c
-  benchIO "bindLoopN" r (bindLoopN c)
-  benchIO "pureUnitN" r (pureUnitN c)
+  r1 <- benchInt "nothingN" r nothingN c
+  r2 <- benchInt "constUnitN" r constUnitN c
+  r3 <- benchIO "bindLoopN" r (bindLoopN c)
+  r4 <- benchIO "pureUnitN" r (pureUnitN c)
+  forM_ [r1, r2, r3, r4] reportResult
   putStrLn ""
 
   putStrLn "list primitives"
-  bench "listLength" r listLength xs
+  r5 <- bench "listLength" r listLength xs
+  reportResult r5
   putStrLn ""
 
   putStrLn "polymorphism cost"
-  bench "monoSum" r monoSum xs
-  bench "polySum Int" r ((\x -> polySum x :: Int) . hold) xs
+  r6 <- bench "monoSum" r monoSum xs
+  r7 <- bench "polySum Int" r ((\x -> polySum x :: Int) . hold) xs
+  forM_ [r6, r7] reportResult
   putStrLn ""
 
   putStrLn "state-hiding (skolem) effect"
-  bench "sumExplicit" r sumExplicit xs
-  bench "sumHidden" r sumHidden xs
-  bench "sumMealy" r sumMealy xs
+  r8 <- bench "sumExplicit" r sumExplicit xs
+  r9 <- bench "sumHidden" r sumHidden xs
+  r10 <- bench "sumMealy" r sumMealy xs
+  forM_ [r8, r9, r10] reportResult
   putStrLn ""
+
+  case cfgChartDir cfg of
+    Nothing -> pure ()
+    Just dir -> do
+      putStrLn "writing distribution charts"
+      forM_ [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10] (chartResult dir)
+      putStrLn ""
 
   putStrLn "Done."

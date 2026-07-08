@@ -31,6 +31,9 @@ For custom meters, build a `Meter` with `mkMeter` and wrap an arrow with
 function-application floor, list primitives, polymorphism cost, and the
 state-hiding (skolem) effect used by `foldl` / `Mealy`.
 
+Add `--chartdir DIR` to write an SVG histogram of the raw per-run timings
+for each benchmark (uses `tdigest` + `chart-svg` + `prettychart`).
+
 `examples/baseline-analytics.md` contains the calibrated numbers plus the
 GHC Core for the tight sum loop and a C reference calibration.
 
