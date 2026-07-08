@@ -213,8 +213,58 @@ Representative run (100 runs, 100k list elements / 10M function-call iterations)
 | `sumMealy` | 328 µs | 341 µs | 362 µs | 363 µs | 0 |
 
 `listLength` shows the classic GC / scheduler hiccup: a tight p50 but a p99
-almost 10× larger. The numeric folds are more stable, with `polySum Int` having
-a slightly wider tail (wider type-class path) but no 2× spikes.
+almost 10× larger. Among the numeric folds, `polySum Int` has a reproducible
+~1.7× p99 tail (see below) — and it is **not** a "wider type-class path": the
+dictionary is hoisted out of the loop. The cause is allocation, proven next.
+
+## The polySum tail — three instruments, three truths
+
+`polySum Int` (a `Num a =>` fold specialized to `Int` at the call site) has a
+tight p50 (~330 µs, *faster* than `monoSum`) but a stable, reproducible p99 of
+~570 µs — a ~1.7× tail `monoSum` does not have. Three instruments, each finding
+something the previous one could not:
+
+**1. The timer finds the tail.** p50/p90 tight, p99 fat, across three runs — not
+noise. But the timer cannot say *why*.
+
+**2. Core explains the loop — but not the tail.** GHC does *not* specialize
+`polySum`; it stays generic, but hoists the dictionary method **out of the loop**:
+
+```haskell
+polySum @a $dNum =
+  let k = + $dNum ; z0 = fromInteger $dNum 0     -- dictionary read ONCE per call
+  in \xs -> joinrec { go1 ds eta = case ds of
+       { [] -> eta ; y:ys -> case eta of z -> jump go1 ys (k z y) } } (go1 xs z0)
+```
+
+So there is **no per-element dictionary dispatch** — `k` is an indirect call to a
+hoisted closure. This kills the "wider type-class path" story: the loop cost is
+nearly `monoSum`'s. Core explains the tight p50. It says nothing about the tail.
+
+**3. The space + GC meter finds the actual cause.** `allocated_bytes` and minor-GC
+counts per call (`examples/AllocProbe.hs`, `+RTS -T`):
+
+| n | mono bytes | mono minor-GC | poly bytes | poly minor-GC |
+|---|---|---|---|---|
+| 10 000 | 0 | 0 | 0 | 0 |
+| 100 000 | 4.13 MB | **1** | 8.29 MB | **2** |
+| 1 000 000 | 70.2 MB | 17 | 87.0 MB | 21 |
+
+At n=100k (the benchmark size) `polySum` triggers **2 minor GCs per call vs
+`monoSum`'s 1** — double the stop-the-world pauses. A minor GC is exactly a
+multi-µs pause; most runs dodge it (tight p50), the unlucky ones eat it (fat p99).
+**That is the tail**, mechanism proven, not guessed.
+
+> Correction of a plausible-but-wrong hypothesis: the first guess was "boxed
+> accumulator allocates per element." The n=10 000 row refutes it — **zero** bytes,
+> **zero** GC in both. The accumulator stays unboxed-in-registers. The extra
+> allocation is that `polySum`'s specialization failure forces the `[Int]` elements
+> to be materialized fully boxed for the generic consumer, ~2× the list-construction
+> traffic at n=100k. Timing + Core alone would have shipped the wrong cause; only
+> the space/GC meter caught it.
+
+The lesson: **the timer says *that*, Core says *how the loop is shaped*, and only
+allocation + GC counts say *why the tail exists*.** Reach for all three.
 
 ## Interpretation
 
@@ -224,8 +274,12 @@ a slightly wider tail (wider type-class path) but no 2× spikes.
   and list traversals occasionally see large latency spikes.
 - **Vectorization matters.** A contiguous unboxed vector sum would close most of
   the remaining gap to C and likely remove the `listLength` tail.
+- **Allocation, not the loop, drives the tails.** `polySum`'s fat p99 is extra
+  minor GCs from forced list boxing — the loop itself is fine. Tails are a
+  space/GC story; read them with `allocated_bytes` + GC counts, not the clock.
 - **`circuits-meter` can resolve ~1 ns differences.** The `constUnitN` /
-  `nothingN` delta is 1.3 ns; `monoSum` / `listLength` delta is 1.5 ns. This is
+  `nothingN` delta is 1.4 ns; `monoSum` / `listLength` delta is 1.4 ns. This is
   the right granularity for measuring circuit primitives.
 - **Distribution matters, not just averages.** `tdigest` exposes the occasional
-  multi-millisecond spike that a simple average would hide.
+  multi-millisecond spike that a simple average would hide — and a fat tail is a
+  question (*why?*), not just a number.
