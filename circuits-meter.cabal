@@ -85,3 +85,20 @@ executable baseline
     -Wcompat
     -O2
     -rtsopts
+
+executable nub
+  main-is: Nub.hs
+  hs-source-dirs: examples
+
+  build-depends:
+    base >=4.20 && <5,
+    circuits-meter,
+    containers >=0.6 && <0.9,
+    optparse-applicative >=0.18 && <0.19,
+
+  default-language: GHC2024
+  ghc-options:
+    -Wall
+    -Wcompat
+    -O2
+    -rtsopts
