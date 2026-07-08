@@ -5,4 +5,7 @@ packages:
 constraints:
   circuits >= 0.2
 
+allow-newer:
+  tdigest:base
+
 write-ghc-environment-files: always

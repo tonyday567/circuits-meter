@@ -91,13 +91,40 @@ each element is unboxed from `I#` once, the addition is the primitive `+#`, and
 the recursion is tail-recursive. The 4 ns/element cost is not the compiler
 failing — it is the list data structure.
 
+## Distribution analysis with tdigest
+
+`Baseline.hs` now keeps the raw per-run timings and computes percentiles with
+`tdigest`. A spike is defined as any value more than 2× the median.
+
+Representative run (100 runs, 100k list elements / 10M function-call iterations):
+
+| benchmark | p50 | p90 | p99 | max | spikes |
+|---|---|---|---|---|---|
+| `nothingN` | 6 ms | 7 ms | 11 ms | 12 ms | 0 |
+| `constUnitN` | 20 ms | 20 ms | 21 ms | 21 ms | 0 |
+| `bindLoopN` | 6 ms | 6 ms | 6 ms | 7 ms | 0 |
+| `pureUnitN` | 20 ms | 20 ms | 21 ms | 21 ms | 0 |
+| `listLength` | 211 µs | 220 µs | 2 ms | 3 ms | **1** |
+| `monoSum` | 353 µs | 356 µs | 366 µs | 366 µs | 0 |
+| `polySum Int` | 331 µs | 350 µs | 574 µs | 575 µs | 0 |
+| `sumExplicit` | 349 µs | 364 µs | 386 µs | 400 µs | 0 |
+| `sumHidden` | 329 µs | 337 µs | 349 µs | 354 µs | 0 |
+| `sumMealy` | 328 µs | 341 µs | 362 µs | 363 µs | 0 |
+
+`listLength` shows the classic GC / scheduler hiccup: a tight p50 but a p99
+almost 10× larger. The numeric folds are more stable, with `polySum Int` having
+a slightly wider tail (wider type-class path) but no 2× spikes.
+
 ## Interpretation
 
 - **Haskell tight loops are fine.** The Core for `monoSum` is as good as a
   scalar hand-written loop.
-- **Lists are expensive.** Pointer chasing dominates for small per-element work.
+- **Lists are expensive.** Pointer chasing dominates for small per-element work,
+  and list traversals occasionally see large latency spikes.
 - **Vectorization matters.** A contiguous unboxed vector sum would close most of
-  the remaining gap to C.
+  the remaining gap to C and likely remove the `listLength` tail.
 - **`circuits-meter` can resolve ~1 ns differences.** The `constUnitN` /
   `nothingN` delta is 1.3 ns; `monoSum` / `listLength` delta is 1.5 ns. This is
   the right granularity for measuring circuit primitives.
+- **Distribution matters, not just averages.** `tdigest` exposes the occasional
+  multi-millisecond spike that a simple average would hide.

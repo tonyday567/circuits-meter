@@ -13,8 +13,11 @@ module Main where
 
 import Circuit.Meter
 import Circuit.Meter.Time
+import Control.Arrow (Kleisli (..), runKleisli)
 import Control.DeepSeq
 import Control.Monad (replicateM_)
+import Data.List qualified as List
+import Data.TDigest
 import Options.Applicative
 import Prelude hiding (sum)
 
@@ -149,20 +152,39 @@ scaleNanos n
   | n < 1000000 = (fromIntegral n / 1e3, "µs")
   | otherwise = (fromIntegral n / 1e6, "ms")
 
+reportDist :: String -> [Nanos] -> IO ()
+reportDist name ts = do
+  let dig :: TDigest 25
+      dig = tdigest (fromIntegral <$> ts)
+      p q = maybe "?" fmt (floor <$> quantile q dig :: Maybe Nanos)
+      sorted = List.sort ts
+      n = length ts
+      p50v = sorted !! (n `div` 2)
+      maxv = last sorted
+      spikeThresh = 2 * fromIntegral p50v :: Double
+      spikes = length [t | t <- ts, fromIntegral t > spikeThresh]
+  putStrLn $
+    name
+      <> ": p50=" <> fmt p50v
+      <> " p90=" <> p 0.9
+      <> " p99=" <> p 0.99
+      <> " max=" <> fmt maxv
+      <> " spikes=" <> show spikes
+
 bench :: (NFData b) => String -> Int -> ([Int] -> b) -> [Int] -> IO ()
 bench name n f xs = do
-  (t, _) <- ticksN n f xs
-  putStrLn $ name <> ": " <> fmt t
+  (ts, _) <- ticks n f xs
+  reportDist name ts
 
 benchInt :: (NFData b) => String -> Int -> (Int -> b) -> Int -> IO ()
 benchInt name n f k = do
-  (t, _) <- ticksN n f k
-  putStrLn $ name <> ": " <> fmt t
+  (ts, _) <- ticks n f k
+  reportDist name ts
 
 benchIO :: String -> Int -> IO () -> IO ()
 benchIO name n act = do
-  (t, _) <- ticksION n act
-  putStrLn $ name <> ": " <> fmt t
+  (ts, _) <- runKleisli (timesK 0 n timeM (Kleisli (const act))) ()
+  reportDist name ts
 
 -- ---------------------------------------------------------------------------
 -- Main

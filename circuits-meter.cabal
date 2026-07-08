@@ -70,6 +70,7 @@ executable baseline
     circuits-meter,
     deepseq >=1.4 && <1.6,
     optparse-applicative >=0.18 && <0.19,
+    tdigest >=0.2 && <0.4,
 
   default-language: GHC2024
   ghc-options:
