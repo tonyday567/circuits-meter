@@ -31,8 +31,20 @@ clang -O2 -o other/c_funcapp other/c_funcapp.c && other/c_funcapp
 | `bindLoopN` | 6 ms | **0.60 ns** | — |
 | `pureUnitN` | 20 ms | **2.00 ns** | +1.40 ns |
 
-A Haskell function call / monadic `pure ()` closure costs about **1.3 ns** on
-this machine.
+A Haskell function call costs about **1.4 ns** on this machine — the *call
+ceremony*, not a closure and not the monad. The Core proves both halves:
+
+- The loop is real, not eliminated. `nothingN`'s worker is bare decrement /
+  compare-zero / jump (`$wgo3 = \ww -> case ww of {_ -> $wgo3 (ww-1#); 0# -> (##)}`),
+  and the per-iteration cost scales dead-linearly with `count` (5M→3ms, 10M→6ms,
+  20M→13ms), so the 0.6 ns floor is real loop control, not a constant-folded no-op.
+- The +1.4 ns is one `NOINLINE` call per iteration. `constUnitN` adds a call to
+  `$wconstUnit = \_ -> (##)` (takes/returns unit, empty body); `pureUnitN` adds a
+  call to `$wpureUnit = \s -> s` — **`IO` compiled to the identity on `State#`**.
+  No heap closure is allocated (both are top-level workers, called directly), and
+  the monad contributes *zero*: the pure path and the IO path pay the identical
+  +1.4 ns because they bottom out at the same thing — the ceremony of an opaque
+  (non-inlinable) call. What you pay for is the call, not the abstraction.
 
 ### C reference
 
@@ -46,15 +58,45 @@ call. The absolute cost is small: ~1.3 ns.
 
 ## List primitives
 
-100 000 elements, averaged over 100 runs:
+100 000 elements, averaged over 100 runs (live: `--size 100000`):
 
-| benchmark | per element |
-|---|---|
-| `listLength` | **2.67 ns** |
-| `monoSum` | **4.16 ns** |
+| benchmark | per element | what the loop does |
+|---|---|---|
+| `listLength` | **2.11 ns** | walk spine, count cells — never touches the element |
+| `monoSum` | **3.53 ns** | walk spine **+ unbox `I#` + `+#`** per element |
 
-`monoSum` pays the same list pointer chase as `listLength` (~2.67 ns) plus the
-`I#` unbox, primitive `+#`, and tail call (~1.49 ns).
+The two loops are structurally identical except for element access — the Core makes
+the decomposition exact:
+
+```haskell
+-- listLength → GHC's $wlenAcc (imported): counts cells, ignores the value
+case ds of { [] -> acc ; _ : ys -> lenAcc ys (acc +# 1#) }
+
+-- monoSum → $wgo4: same spine walk, but dereferences + unboxes each element
+case ds of { [] -> ww ; y : ys -> case y of { I# y1 -> $wgo4 ys (+# ww y1) } }
+```
+
+Both: same `:` pattern-match, same pointer-chase down the spine, same tail-recursive
+unboxed `Int#` accumulator, zero allocation. The **only** difference is
+`case y of { I# y1 -> … }` — following the element pointer and unboxing the box.
+
+So the per-element cost splits cleanly:
+
+- **2.11 ns = the spine pointer-chase alone** (load next cons cell, branch, bump
+  counter). This is the pure cost of the linked-list *structure*.
+- **3.53 − 2.11 = 1.42 ns = reading the data** (deref element pointer, unbox `I#`,
+  `+#`).
+
+**The structure costs more than the work.** For a `sum`, over half the time goes to
+chasing pointers down the spine before any arithmetic happens. GHC produced the
+textbook-perfect loop (unboxed accumulator, one unbox per element, primitive add,
+tail call) — the 3.5 ns is not the compiler failing, it is the boxed-cons-cell
+data layout.
+
+> Caveat: `[1 .. n]` allocates cons cells in order, so this is a **best-case**
+> spine — roughly contiguous in memory. A fragmented list (post-GC, interleaved
+> allocation) chases further and costs more. This is the same pointer-chase
+> mechanism the cache-staircase tier will stress deliberately; here it is unstressed.
 
 ## C sum calibration
 
@@ -93,6 +135,62 @@ You cannot ask for a better looking loop: the accumulator is unboxed `Int#`,
 each element is unboxed from `I#` once, the addition is the primitive `+#`, and
 the recursion is tail-recursive. The 4 ns/element cost is not the compiler
 failing — it is the list data structure.
+
+## State-hiding (the skolem / existential fold) — two facts, kept separate
+
+`sumHidden` and `sumMealy` route the same sum through an **existential**: the state
+type is hidden behind `forall s.`, and the step/seed/extract functions ride in a
+boxed record.
+
+```haskell
+data Fold  a b = forall s. Fold  (s -> a -> s) s (s -> b)
+data Mealy a b = forall s. Mealy (a -> s) (s -> a -> s) (s -> b)
+sumHidden xs = runFold  (Fold (+) (0 :: Int) id) xs
+sumMealy  xs = runMealy (Mealy id (+) id) xs
+```
+
+Live (100k elements, three repeats, stable ordering):
+
+| benchmark | p50 | loop accumulator | at the timing boundary |
+|---|---|---|---|
+| `sumExplicit` | ~348 ns/k → 3.48/elem | **unboxed `Int#`, `+#`** | inlined `$wmonoSum`, then **re-boxes** `I# ww` |
+| `sumHidden` | ~330 ns/k → 3.30/elem | **boxed `Int`, dict `+`** | opaque `NOINLINE` call, returns boxed `Int` |
+| `sumMealy` | ~332 ns/k → 3.32/elem | **boxed `Int`, dict `+`** | opaque `NOINLINE` call, returns boxed `Int` |
+
+**Fact 1 — the existential is genuinely erased (the real finding).** Core shows
+`runFold` scrutinizes the box exactly once and hands three fields to a specialized
+worker; there is no `forall s` box *in the loop*:
+
+```haskell
+runFold … = case ds of { Fold @s ww ww1 ww2 -> $wrunFold ww ww1 ww2 xs }
+$wrunFold ww ww1 ww2 xs =            -- ww, ww1, ww2 are the step/seed/extract
+  ww2 (joinrec { go1 ds eta = case ds of
+                   { [] -> eta ; y:ys -> case eta of z -> jump go1 ys (ww z y) } }
+       jump go1 xs ww1)
+```
+
+The skolemized state costs nothing structural — the abstraction leaves no residue.
+`runMealy` is identical modulo the initial `inject`.
+
+**Fact 2 — the ~5% "faster" is a harness artifact, NOT abstraction being free.**
+Do not read the table as "existential folds beat the plain one." Two boundary
+effects, pulling opposite ways, produce the residual:
+
+- the skolem loops run a **boxed `Int` accumulator with dictionary `(+)`**
+  (`$fNumInt_$c+`), which is *heavier* than `monoSum`'s unboxed `+#`;
+- but `sumExplicit` is **inlined and then re-boxes** its `Int#` result (`I# ww`) to
+  satisfy the harness's `NFData`/`seq#` path, while `sumHidden`/`sumMealy` are
+  **opaque `NOINLINE` calls** that return the boxed `Int` the harness wants directly.
+
+The net ±5% is measurement wrapping, not fold structure. Two separate claims:
+*the existential is erased* (true, Core-proven) and *abstraction is faster* (not
+supported — it's a boundary artifact).
+
+> ⚠️ Correction to an earlier draft: the three do **not** "compile to the same
+> loop." `monoSum` is unboxed (`+#`); `sumHidden`/`sumMealy` are boxed (dict `+`).
+> They land within ~5% *despite* different loops — the short-lived box stays hot —
+> which is itself the interesting part, but "same loop" is false.
+
 
 ## Distribution analysis with tdigest
 
