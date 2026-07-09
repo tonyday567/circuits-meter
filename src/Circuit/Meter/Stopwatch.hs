@@ -34,10 +34,10 @@ where
 
 import Circuit
 import Circuit.Meter (Meter)
-import qualified Circuit.Meter as Meter
+import Circuit.Meter qualified as Meter
 import Circuit.Meter.Time (Nanos, timeX)
 import Control.Arrow (Kleisli (..), first)
-import Control.Category ((>>>), (.))
+import Control.Category ((.), (>>>))
 import Control.DeepSeq (NFData, force)
 import Control.Exception (evaluate)
 import Control.Monad (replicateM_)
@@ -52,9 +52,9 @@ import Prelude hiding (id, (.))
 -- | Stopwatch state: the active watch name, the meter state for the current
 -- in-flight interval, and the log of completed intervals.
 data Watches x y = Watches
-  { active :: String
-  , startState :: x
-  , laps :: Map String [y]
+  { active :: String,
+    startState :: x,
+    laps :: Map String [y]
   }
 
 -- | Extract all measurements for a named label, oldest first.
@@ -82,14 +82,14 @@ lap :: Meter (Kleisli IO) x y -> String -> Trace (,) (Kleisli IO) (a, Watches x 
 lap m label = Arr $ Kleisli $ \(a, ws) -> do
   y <- runKleisli (Meter.stop m) (startState ws)
   x' <- runKleisli (Meter.start m) ()
-  pure (a, ws { startState = x', laps = Map.insertWith (++) label [y] (laps ws) })
+  pure (a, ws {startState = x', laps = Map.insertWith (++) label [y] (laps ws)})
 
 -- | Stop the active watch: record the final interval under @name@ and keep
 -- the log.
 stop :: Meter (Kleisli IO) x y -> String -> Trace (,) (Kleisli IO) (a, Watches x y) (a, Watches x y)
 stop m name = Arr $ Kleisli $ \(a, ws) -> do
   y <- runKleisli (Meter.stop m) (startState ws)
-  pure (a, ws { laps = Map.insertWith (++) name [y] (laps ws) })
+  pure (a, ws {laps = Map.insertWith (++) name [y] (laps ws)})
 
 -- ---------------------------------------------------------------------------
 -- Stage sugar
@@ -138,4 +138,4 @@ meterItN n0 m name stage =
 
 -- | 'meterItN' with the default time meter.
 timeItN :: (NFData b) => Int -> String -> Kleisli IO a b -> Trace (,) (Kleisli IO) a (b, Watches Nanos Nanos)
-timeItN n name stage = meterItN n timeX name stage
+timeItN n = meterItN n timeX

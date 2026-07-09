@@ -60,7 +60,7 @@ nubSet = Set.toList . Set.fromList -- O(n log n), balanced tree
 {-# NOINLINE nubSet #-}
 
 nubSort :: [Int] -> [Int]
-nubSort = map head . group . sort -- O(n log n), sort then group
+nubSort = concatMap (take 1) . group . sort -- O(n log n), sort then group
 {-# NOINLINE nubSort #-}
 
 mkList :: Int -> [Int]
@@ -114,16 +114,17 @@ main = do
   printf "nub reference shape: runs=%d sizes=%s\n\n" runs (show sizes)
 
   printf "%-8s %12s %12s %12s %14s\n" "n" "nub(p50)" "nubSet(p50)" "nubSort(p50)" "nub/nubSet"
-  nubPts <- mapM
-    ( \n -> do
-        tn <- p50Of runs nubList n
-        ts <- p50Of runs nubSet n
-        to <- p50Of runs nubSort n
-        let ratio = fromIntegral tn / fromIntegral ts :: Double
-        printf "%-8d %12s %12s %12s %13.1fx\n" n (fmt tn) (fmt ts) (fmt to) ratio
-        pure (n, tn)
-    )
-    sizes
+  nubPts <-
+    mapM
+      ( \n -> do
+          tn <- p50Of runs nubList n
+          ts <- p50Of runs nubSet n
+          to <- p50Of runs nubSort n
+          let ratio = fromIntegral tn / fromIntegral ts :: Double
+          printf "%-8d %12s %12s %12s %13.1fx\n" n (fmt tn) (fmt ts) (fmt to) ratio
+          pure (n, tn)
+      )
+      sizes
 
   putStrLn ""
   let (c, r2) = fitQuadratic nubPts

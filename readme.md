@@ -132,15 +132,8 @@ chunkMeter = meterIt (both timeX allocX) "chunk"
 
 ## Baseline / calibration
 
-`cabal run baseline` exercises a ladder of micro-benchmarks:
-function-application floor, list primitives, polymorphism cost, and the
-state-hiding (skolem) effect used by `foldl` / `Mealy`.
-
-Add `--chartdir DIR` to write an SVG histogram of the raw per-run timings
-for each benchmark (uses `tdigest` + `chart-svg` + `prettychart`).
-
-`examples/baseline-analytics.md` contains the calibrated numbers plus the
-GHC Core for the tight sum loop and a C reference calibration.
-
-See also [perf-circuits](https://github.com/tonyday567/perf-circuits), the
-sibling repo with larger-scale circuit performance examples.
+The heavy micro-benchmark harness (`baseline` and `alloc-probe`) has been
+moved out of this package and into
+[perf-circuits](https://github.com/tonyday567/perf-circuits), the sibling
+repo with larger-scale circuit performance examples. What remains here is
+the public metering library plus the `perf-bench` and `nub` runners.

@@ -19,21 +19,20 @@ extra-doc-files:
 
 build-type: Simple
 tested-with:
-  ghc ==9.14.1,
-  ghc ==9.12.2,
   ghc ==9.10.1
+  ghc ==9.12.2
+  ghc ==9.14.1
 
-flag baseline
-  description: Build the heavy baseline executable (requires chart-svg, tdigest, prettychart).
-  default: False
-  manual: True
+source-repository head
+  type: git
+  location: https://github.com/tonyday567/circuits-meter.git
 
 library
   exposed-modules:
     Circuit.Meter
+    Circuit.Meter.Space
     Circuit.Meter.Stopwatch
     Circuit.Meter.Time
-    Circuit.Meter.Space
 
   build-depends:
     base >=4.20 && <5,
@@ -52,78 +51,29 @@ library
 executable perf-bench
   main-is: Main.hs
   hs-source-dirs: app
-
   build-depends:
     base >=4.20 && <5,
     circuits >=0.1 && <0.4,
     circuits-meter,
-    clock >=0.8 && <0.9,
-    deepseq >=1.4 && <1.6,
-    optparse-applicative >=0.18 && <0.19,
+    optparse-applicative >=0.18 && <0.20,
 
   default-language: GHC2024
   ghc-options:
     -Wall
     -Wcompat
-    -O2
-    -rtsopts
-
-executable baseline
-  if !flag(baseline)
-    buildable: False
-
-  main-is: Baseline.hs
-  hs-source-dirs: examples
-
-  build-depends:
-    base >=4.20 && <5,
-    chart-svg >=0.8 && <0.9,
-    circuits-meter,
-    deepseq >=1.4 && <1.6,
-    directory >=1.3 && <1.5,
-    filepath >=1.4 && <1.6,
-    numhask-space >=0.10 && <0.14,
-    optics-core >=0.4 && <0.5,
-    optparse-applicative >=0.18 && <0.19,
-    prettychart,
-    tdigest >=0.2 && <0.4,
-    text >=2.0 && <2.2,
-
-  default-language: GHC2024
-  ghc-options:
-    -Wall
-    -Wcompat
-    -O2
     -rtsopts
 
 executable nub
   main-is: Nub.hs
   hs-source-dirs: examples
-
   build-depends:
     base >=4.20 && <5,
     circuits-meter,
     containers >=0.6 && <0.9,
-    optparse-applicative >=0.18 && <0.19,
+    optparse-applicative >=0.18 && <0.20,
 
   default-language: GHC2024
   ghc-options:
     -Wall
     -Wcompat
-    -O2
-    -rtsopts
-
-executable alloc-probe
-  main-is: AllocProbe.hs
-  hs-source-dirs: examples
-
-  build-depends:
-    base >=4.20 && <5,
-    deepseq >=1.4 && <1.6,
-
-  default-language: GHC2024
-  ghc-options:
-    -Wall
-    -Wcompat
-    -O2
     -rtsopts
