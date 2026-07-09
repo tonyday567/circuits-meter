@@ -3,13 +3,13 @@
 
 -- | Time measurement as a Circuit.
 --
--- 'timeM' is the canonical 'Meter' for nanosecond timing. All other
+-- 'timeX' is the canonical 'Meter' for nanosecond timing. All other
 -- time combinators are derived from it via 'Circuit.Meter.meterAction'.
 module Circuit.Meter.Time
   ( -- * Time meter
     Nanos,
     nanos,
-    timeM,
+    timeX,
 
     -- * Single timing
     tick,
@@ -80,15 +80,15 @@ nanos = toNanoSecs <$> getTime MonotonicRaw
 -- This is a stopwatch: 'start' captures the initial time, and each
 -- 'stop' reads the current clock and subtracts.  Calling 'stop' multiple
 -- times gives cumulative elapsed time since the single start.
-timeM :: Meter (Kleisli IO) Nanos Nanos
-timeM =
+timeX :: Meter (Kleisli IO) Nanos Nanos
+timeX =
   mkMeter
     nanos
     ( \s -> do
         !e <- nanos
         pure (e - s)
     )
-{-# INLINEABLE timeM #-}
+{-# INLINEABLE timeX #-}
 
 -- ---------------------------------------------------------------------------
 -- Single timing
@@ -115,7 +115,7 @@ reifyC = run
 
 -- | Single timing of a pure function. Returns @(nanos, result)@.
 tick :: (NFData b) => (a -> b) -> a -> IO (Nanos, b)
-tick = once timeM
+tick = once timeX
 {-# INLINEABLE tick #-}
 
 -- ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ tick = once timeM
 
 -- | @n@ timings of the same function. Returns @( [nanos], lastResult )@.
 ticks :: (NFData b) => Int -> (a -> b) -> a -> IO ([Nanos], b)
-ticks n f = runKleisli (timesC n timeM f)
+ticks n f = runKleisli (timesC n timeX f)
 {-# INLINEABLE ticks #-}
 
 -- | @n@ timings collapsed to a single average nanosecond count.
@@ -174,19 +174,19 @@ ticksION n action = do
 -- Plugin metering
 -- ---------------------------------------------------------------------------
 
--- | Meter an 'IO' action with 'timeM'.
+-- | Meter an 'IO' action with 'timeX'.
 --
 -- The result is a 'Circuit' polymorphic in the tensor @t@, so it can
 -- be lifted into pipelines using either @(,)@ (lazy knot-tying) or
 -- 'Either' (iteration) without changing the combinator.
 meterIO :: (a -> IO b) -> Trace t (Kleisli IO) a (Nanos, b)
-meterIO f = meterAction timeM (Kleisli f)
+meterIO f = meterAction timeX (Kleisli f)
 {-# INLINEABLE meterIO #-}
 
--- | Meter a pure function with 'timeM'. Forces to NF inside the timed
+-- | Meter a pure function with 'timeX'. Forces to NF inside the timed
 -- bracket so the work cannot be floated out.
 meter :: (NFData b) => (a -> b) -> Trace t (Kleisli IO) a (Nanos, b)
-meter f = meterAction timeM (Kleisli (evaluate . force . f . hold))
+meter f = meterAction timeX (Kleisli (evaluate . force . f . hold))
 {-# INLINEABLE meter #-}
 
 -- ---------------------------------------------------------------------------

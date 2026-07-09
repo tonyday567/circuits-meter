@@ -200,7 +200,7 @@ benchInt name n f k = do
 
 benchIO :: String -> Int -> IO () -> IO Result
 benchIO name n act = do
-  (ts, _) <- runKleisli (timesK 0 n timeM (Kleisli (const act))) ()
+  (ts, _) <- runKleisli (timesK 0 n timeX (Kleisli (const act))) ()
   pure (Result name ts)
 
 -- ---------------------------------------------------------------------------

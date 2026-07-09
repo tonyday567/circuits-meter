@@ -6,7 +6,7 @@
 -- Five measurements, all using the public runners from
 -- 'Circuit.Meter.Time' rather than hand-rolled nanosecond brackets:
 --
---   1. clock overhead  — 'timeM' bracketing a no-op
+--   1. clock overhead  — 'timeX' bracketing a no-op
 --   2. whileM_         — 'timesK' around the IORef loop
 --   3. trace-delim     — 'timesK' around the Either loop
 --   4. meterAction-loop — same loop measured with 'Circuit.Meter.meterAction'
@@ -83,7 +83,7 @@ report name xs = do
 benchClock :: Config -> IO [Nanos]
 benchClock cfg = do
   let n = cfgRuns cfg
-  (ts, _) <- runKleisli (timesK 0 n timeM (Kleisli (\() -> pure ()))) ()
+  (ts, _) <- runKleisli (timesK 0 n timeX (Kleisli (\() -> pure ()))) ()
   pure ts
 
 -- ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ benchWhileM :: Config -> IO [Nanos]
 benchWhileM cfg = do
   let target = cfgTraceTarget cfg
       n = cfgRuns cfg
-  (ts, _) <- runKleisli (timesK 0 n timeM (Kleisli (\() -> countIORef target))) ()
+  (ts, _) <- runKleisli (timesK 0 n timeX (Kleisli (\() -> countIORef target))) ()
   pure ts
 
 -- ---------------------------------------------------------------------------
@@ -130,21 +130,21 @@ benchTrace :: Config -> IO [Nanos]
 benchTrace cfg = do
   let target = cfgTraceTarget cfg
       n = cfgRuns cfg
-  (ts, _) <- runKleisli (timesK 0 n timeM (Kleisli (\() -> runTrace target))) ()
+  (ts, _) <- runKleisli (timesK 0 n timeX (Kleisli (\() -> runTrace target))) ()
   pure ts
 
 -- ---------------------------------------------------------------------------
 -- Benchmark 4: meterA on the trace loop
 -- ---------------------------------------------------------------------------
 
--- | The trace loop wrapped in a 'Meter'. 'meterAction timeM' builds a
+-- | The trace loop wrapped in a 'Meter'. 'meterAction timeX' builds a
 -- circuit that meters each call; 'timesK' iterates it via 'reifyC'.
 benchMeterK :: Config -> IO [Nanos]
 benchMeterK cfg = do
   let target = cfgTraceTarget cfg
       n = cfgRuns cfg
       kaction = Kleisli (\() -> runTrace target)
-  (ts, _r) <- runKleisli (timesK 0 n timeM kaction) ()
+  (ts, _r) <- runKleisli (timesK 0 n timeX kaction) ()
   pure ts
 
 -- ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ benchBoth cfg = do
     then putStrLn "time+space: skipped (enable with +RTS -T)"
     else do
       let target = cfgTraceTarget cfg
-          meterBoth = both timeM allocM
+          meterBoth = both timeX allocX
           kaction = Kleisli (\() -> runTrace target)
       ((dt, alloc), _r) <- runKleisli (reifyC (meterAction meterBoth kaction)) ()
       putStrLn $
@@ -210,7 +210,7 @@ main = do
   putStrLn ""
 
   -- simultaneous time + space (single shot, not repeated)
-  putStrLn "5. both timeM + allocM (single shot)"
+  putStrLn "5. both timeX + allocX (single shot)"
   benchBoth cfg
   putStrLn ""
 

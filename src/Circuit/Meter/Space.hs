@@ -3,11 +3,11 @@
 -- | Space measurement as a Circuit.
 --
 -- GHC RTS allocation statistics read before and after a computation.
--- 'allocM' measures allocated bytes; 'SpaceStats' is available for
+-- 'allocX' measures allocated bytes; 'SpaceStats' is available for
 -- users who want the full RTS snapshot.
 module Circuit.Meter.Space
   ( -- * Space meter
-    allocM,
+    allocX,
 
     -- * Types
     SpaceStats (..),
@@ -60,12 +60,12 @@ instance Monoid Bytes where
   mempty = 0
 
 -- | Measure only allocated bytes.
-allocM :: Meter (Kleisli IO) Bytes Bytes
-allocM =
+allocX :: Meter (Kleisli IO) Bytes Bytes
+allocX =
   mkMeter
     (fmap (Bytes . allocated_bytes) getRTSStats)
     ( \s -> do
         s' <- fmap (Bytes . allocated_bytes) getRTSStats
         pure (s' - s)
     )
-{-# INLINEABLE allocM #-}
+{-# INLINEABLE allocX #-}
