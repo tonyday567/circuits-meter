@@ -8,30 +8,39 @@ category: performance
 synopsis: Performance measurement as a Circuit
 description:
   Performance measurement reimagined as a traced monoidal category.
-  'Meter' is a state wire introduced before a computation and read
-  after: 'initK' creates the state, 'termK' observes it. Time, space,
-  and combined meters compose sequentially and in parallel via the
-  cartesian tensor. Includes a benchmark comparing circuit-based
-  measurement against IORef control groups.
+  A 'Meter' captures state before a computation and observes it
+  after. 'meterAction' sandwiches an arrow between the two, giving
+  a 'Circuit' polymorphic in its tensor. Time and allocation meters
+  compose in parallel via 'both'. Includes a benchmark exercising
+  the public runners against IORef and delimited-continuation controls.
+
+extra-doc-files:
+  readme.md
+
 build-type: Simple
 tested-with:
-  ghc ==9.14.1,
-  ghc ==9.12.2,
   ghc ==9.10.1
+  ghc ==9.12.2
+  ghc ==9.14.1
+
+source-repository head
+  type: git
+  location: https://github.com/tonyday567/circuits-meter.git
 
 library
   exposed-modules:
     Circuit.Meter
-    Circuit.Meter.Time
     Circuit.Meter.Space
+    Circuit.Meter.Stopwatch
+    Circuit.Meter.Time
 
   build-depends:
     base >=4.20 && <5,
-    circuits >=0.1 && <0.2,
+    circuits >=0.1 && <0.4,
     clock >=0.8 && <0.9,
+    containers >=0.6 && <0.9,
     deepseq >=1.4 && <1.6,
     profunctors >=5.6 && <5.7,
-    text >=2.0 && <2.2,
 
   hs-source-dirs: src
   default-language: GHC2024
@@ -42,19 +51,29 @@ library
 executable perf-bench
   main-is: Main.hs
   hs-source-dirs: app
-
   build-depends:
     base >=4.20 && <5,
-    circuits >=0.1 && <0.2,
+    circuits >=0.1 && <0.4,
     circuits-meter,
-    clock >=0.8 && <0.9,
-    deepseq >=1.4 && <1.6,
-    optparse-applicative >=0.18 && <0.19,
-    text >=2.0 && <2.2,
+    optparse-applicative >=0.18 && <0.20,
 
   default-language: GHC2024
   ghc-options:
     -Wall
     -Wcompat
-    -O2
+    -rtsopts
+
+executable nub
+  main-is: Nub.hs
+  hs-source-dirs: examples
+  build-depends:
+    base >=4.20 && <5,
+    circuits-meter,
+    containers >=0.6 && <0.9,
+    optparse-applicative >=0.18 && <0.20,
+
+  default-language: GHC2024
+  ghc-options:
+    -Wall
+    -Wcompat
     -rtsopts

@@ -18,8 +18,18 @@ cabal build perf-bench \
 Output lands here:
 ```
 dist-newstyle/build/.../perf-bench-tmp/app/Main.dump-simpl
-dist-newstyle/build/.../circuits-meter-*/build/src/Circuit/Perf.dump-simpl
+dist-newstyle/build/.../circuits-meter-*/build/src/Circuit/Meter/Time.dump-simpl
 ```
+
+> ⚠️ **API-rename note (post-minimise):** case studies 1–2 below (`countIORef`,
+> `runTrace`) are current — the subjects live in `app/Main.hs` and build via
+> `perf-bench`. Case studies 3–5 quote Core captured under the *old* `Circuit.Perf`
+> naming (`reify`, `Lift`, `meterC`/`meterK`, `Meter s t`). The current API renamed
+> these: `reify → run`, `Lift → Arr`, the meter type is `Meter arr a b`, and the
+> code moved to `Circuit.Meter` / `Circuit.Meter.Time` (with `Ends`/`Queue` now in
+> `circuits` core). The *patterns* those studies teach (join-point loops, one cons
+> per run, `hold` as the anti-optimizer wall) still hold; the exact symbol names in
+> the listings are stale until re-dumped. Re-dump before quoting them as current.
 
 Flags:
 - `-ddump-simpl` — Core after all optimizations
@@ -434,6 +444,5 @@ With `hold`, the application is anchored inside the timed region. The `NOINLINE`
 ## See Also
 
 - `read-ghc-core` skill (user scope) — comprehensive guide to reading Core, including lazy knot analysis and monad abstraction overhead.
-- `scaling.md` — `sumTo` case study: meter finds the thunk cliff, Core would show the boxed accumulator.
-- `nub.md` — quadratic detection: meter finds the curve, Core would show the nested `letrec`.
-- `seismo.md` — streaming per-run data: when Core shows an allocation per iteration, the seismograph shows the GC spike.
+- `nub.md` — quadratic detection: meter finds the curve (perfect O(n²) fit), Core would show the nested `letrec`.
+- `baseline-analytics.md` — the calibrated function-application / list / fold floor with distribution charts.

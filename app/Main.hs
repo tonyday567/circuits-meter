@@ -3,15 +3,14 @@
 
 -- | Benchmark: performance measurement as a Circuit.
 --
--- Four measurements:
---   1. clock overhead  — raw MonotonicRaw resolution
---   2. whileM_         — control group: IORef + whileM_
---   3. trace-delim     — Trace (Kleisli IO) Either: iterate until Right
---   4. meterK-loop     — same loop measured with 'Circuit.Meter.meterK'
+-- Five measurements, all using the public runners from
+-- 'Circuit.Meter.Time' rather than hand-rolled nanosecond brackets:
 --
--- The last item demonstrates the new API: a 'Meter' wrapped around
--- the delimited-continuation loop, producing per-iteration timings
--- via 'timesK'.
+--   1. clock overhead  — 'timeX' bracketing a no-op
+--   2. whileM_         — 'timesK' around the IORef loop
+--   3. trace-delim     — 'timesK' around the Either loop
+--   4. meterAction-loop — same loop measured with 'Circuit.Meter.meterAction'
+--   5. both            — simultaneous time + space via 'both'
 --
 -- Usage:
 --   perf-bench --runs 100000 --warmup 1000
@@ -20,15 +19,12 @@ module Main where
 import Circuit.Meter
 import Circuit.Meter.Space
 import Circuit.Meter.Time
-import Circuit.Traced
+import Circuit.Trace (trace)
 import Control.Arrow hiding (loop)
-import Control.Exception
-import Control.Monad
 import Data.IORef
 import Data.List qualified as List
 import GHC.Stats
 import Options.Applicative
-import System.IO
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
@@ -87,10 +83,8 @@ report name xs = do
 benchClock :: Config -> IO [Nanos]
 benchClock cfg = do
   let n = cfgRuns cfg
-  replicateM n do
-    !t0 <- nanos
-    !t1 <- nanos
-    pure (t1 - t0)
+  (ts, _) <- runKleisli (timesK 0 n timeX (Kleisli (\() -> pure ()))) ()
+  pure ts
 
 -- ---------------------------------------------------------------------------
 -- Benchmark 2: whileM_ control group
@@ -111,12 +105,8 @@ benchWhileM :: Config -> IO [Nanos]
 benchWhileM cfg = do
   let target = cfgTraceTarget cfg
       n = cfgRuns cfg
-  replicateM n do
-    !t0 <- nanos
-    !r <- countIORef target
-    _ <- evaluate r
-    !t1 <- nanos
-    pure (t1 - t0)
+  (ts, _) <- runKleisli (timesK 0 n timeX (Kleisli (\() -> countIORef target))) ()
+  pure ts
 
 -- ---------------------------------------------------------------------------
 -- Benchmark 3: delimited continuation trace
@@ -140,26 +130,21 @@ benchTrace :: Config -> IO [Nanos]
 benchTrace cfg = do
   let target = cfgTraceTarget cfg
       n = cfgRuns cfg
-  replicateM n do
-    !t0 <- nanos
-    !r <- runTrace target
-    _ <- evaluate r
-    !t1 <- nanos
-    pure (t1 - t0)
+  (ts, _) <- runKleisli (timesK 0 n timeX (Kleisli (\() -> runTrace target))) ()
+  pure ts
 
 -- ---------------------------------------------------------------------------
--- Benchmark 4: meterK on the trace loop
+-- Benchmark 4: meterA on the trace loop
 -- ---------------------------------------------------------------------------
 
--- | The trace loop wrapped in a 'Meter'. 'meterK timeM' adds clock
--- reads before and after each call to 'runKleisli (trace ...)'. The
--- 'timesK' combinator then iterates this measured arrow.
+-- | The trace loop wrapped in a 'Meter'. 'meterAction timeX' builds a
+-- circuit that meters each call; 'timesK' iterates it via 'reifyC'.
 benchMeterK :: Config -> IO [Nanos]
 benchMeterK cfg = do
   let target = cfgTraceTarget cfg
       n = cfgRuns cfg
       kaction = Kleisli (\() -> runTrace target)
-  (ts, _r) <- runKleisli (timesK 0 n timeM kaction) ()
+  (ts, _r) <- runKleisli (timesK 0 n timeX kaction) ()
   pure ts
 
 -- ---------------------------------------------------------------------------
@@ -173,9 +158,9 @@ benchBoth cfg = do
     then putStrLn "time+space: skipped (enable with +RTS -T)"
     else do
       let target = cfgTraceTarget cfg
-          meterBoth = both timeM allocM
+          meterBoth = both timeX allocX
           kaction = Kleisli (\() -> runTrace target)
-      ((dt, alloc), _r) <- runKleisli (meterK meterBoth kaction) ()
+      ((dt, alloc), _r) <- runKleisli (reifyC (meterAction meterBoth kaction)) ()
       putStrLn $
         "time+space: time="
           <> fmt dt
@@ -218,14 +203,14 @@ main = do
   report "trace-delim" ts
   putStrLn ""
 
-  -- meterK on trace
-  putStrLn "4. meterK + timesK (circuit perf API)"
+  -- meterAction on trace
+  putStrLn "4. meterAction + timesK (circuit perf API)"
   ms <- benchMeterK cfg
-  report "meterK" ms
+  report "meterAction" ms
   putStrLn ""
 
   -- simultaneous time + space (single shot, not repeated)
-  putStrLn "5. both timeM + allocM (single shot)"
+  putStrLn "5. both timeX + allocX (single shot)"
   benchBoth cfg
   putStrLn ""
 
