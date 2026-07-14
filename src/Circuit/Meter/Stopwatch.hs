@@ -33,11 +33,11 @@ module Circuit.Meter.Stopwatch
 where
 
 import Circuit
+import Circuit.Classes ((.), (>>>))
 import Circuit.Meter (Meter)
 import Circuit.Meter qualified as Meter
 import Circuit.Meter.Time (Nanos, timeX)
 import Control.Arrow (Kleisli (..), first)
-import Control.Category ((.), (>>>))
 import Control.DeepSeq (NFData, force)
 import Control.Exception (evaluate)
 import Control.Monad (replicateM_)
