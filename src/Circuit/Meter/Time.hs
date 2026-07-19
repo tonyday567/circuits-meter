@@ -41,7 +41,7 @@ module Circuit.Meter.Time
 where
 
 import Circuit
-import Circuit.Classes (Category (..), Discrete (..))
+import Circuit.Category (Category (..), Discrete (..))
 import Circuit.Meter
 import Control.Arrow
 import Control.DeepSeq
