@@ -22,7 +22,7 @@ module Circuit.Meter
   )
 where
 
-import Circuit.Trace
+import Circuit.Loop (Loop (..))
 import Control.Arrow
 import Control.Category
 import Control.DeepSeq
@@ -76,9 +76,9 @@ both m1 m2 =
 -- a 'Circuit' polymorphic in the tensor @t@.
 --
 -- For arrow-level extraction, use 'run' with your chosen tensor.
-meterAction :: (Category arr, Strong arr) => Meter arr a b -> arr c d -> Trace t arr c (b, d)
+meterAction :: (Category arr, Strong arr) => Meter arr a b -> arr c d -> Loop t arr c (b, d)
 meterAction m k =
-  Arr (first' (stop m) . second' k . dimap ((),) id (first' (start m)))
+  Lift (first' (stop m) . second' k . dimap ((),) id (first' (start m)))
 {-# INLINEABLE meterAction #-}
 
 -- | Hold back a value so GHC cannot float a function application past

@@ -110,9 +110,9 @@ onceK m k = runKleisli (reifyC (meterAction m k))
 -- Convenience alias for 'run' with @t = (,)@, used by the runners
 -- below to extract a 'Kleisli' from a metered circuit.
 --
--- 'Discrete' is required because free 'Trace' folds discharge 'Ob' via
+-- 'Discrete' is required because free 'Loop' folds discharge 'Ob' via
 -- 'withOb' (kind-gen / 'Category'+'Ob' hierarchy).
-reifyC :: (Category arr, Traced (,) arr, Discrete arr) => Trace (,) arr a b -> arr a b
+reifyC :: (Category arr, Traced (,) arr, Discrete arr, Ob arr a, Ob arr b) => Loop (,) arr a b -> arr a b
 reifyC = run
 {-# INLINEABLE reifyC #-}
 
@@ -182,13 +182,13 @@ ticksION n action = do
 -- The result is a 'Circuit' polymorphic in the tensor @t@, so it can
 -- be lifted into pipelines using either @(,)@ (lazy knot-tying) or
 -- 'Either' (iteration) without changing the combinator.
-meterIO :: (a -> IO b) -> Trace t (Kleisli IO) a (Nanos, b)
+meterIO :: (a -> IO b) -> Loop t (Kleisli IO) a (Nanos, b)
 meterIO f = meterAction timeX (Kleisli f)
 {-# INLINEABLE meterIO #-}
 
 -- | Meter a pure function with 'timeX'. Forces to NF inside the timed
 -- bracket so the work cannot be floated out.
-meter :: (NFData b) => (a -> b) -> Trace t (Kleisli IO) a (Nanos, b)
+meter :: (NFData b) => (a -> b) -> Loop t (Kleisli IO) a (Nanos, b)
 meter f = meterAction timeX (Kleisli (evaluate . force . f . hold))
 {-# INLINEABLE meter #-}
 

@@ -19,7 +19,7 @@ module Main where
 import Circuit.Meter
 import Circuit.Meter.Space
 import Circuit.Meter.Time
-import Circuit.Trace (trace)
+import Circuit.Channel (trace)
 import Control.Arrow hiding (loop)
 import Data.IORef
 import Data.List qualified as List
