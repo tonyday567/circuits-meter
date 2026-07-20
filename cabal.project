@@ -2,6 +2,12 @@ packages:
   circuits-meter.cabal
   ../circuits/circuits.cabal
   ../prettychart/prettychart.cabal
+  ../chart-svg/chart-svg.cabal
+  ../numhask-space/numhask-space.cabal
+  ../numhask/numhask.cabal
+  ../formatn/formatn.cabal
+  ../harpie/harpie.cabal
+  ../circuits-parser/circuits-parser.cabal
 
 constraints:
   circuits >= 0.2
