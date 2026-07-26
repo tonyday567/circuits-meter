@@ -150,8 +150,8 @@ carry (Kleisli (evaluate . force . f)) -- force to NF
    before timing, or use `ticksN`/`ticksION` which include warmup.
 
 4. **Percentiles, not averages.** Averages are skewed by GC pauses and OS
-   scheduling. Report p10/p50/p90. `baseline` uses `tdigest` for percentile
-   estimates and spike detection.
+   scheduling. Report p10/p50/p90. `baseline` uses `dunning-t-digest` for
+   percentile estimates and spike detection.
 
 5. **RTS options.** Build with `-rtsopts` and run with `+RTS -s` for
    allocation/GC stats. Use `+RTS -A64M` to reduce GC frequency or `+RTS -I0`

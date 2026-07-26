@@ -192,10 +192,10 @@ supported — it's a boundary artifact).
 > which is itself the interesting part, but "same loop" is false.
 
 
-## Distribution analysis with tdigest
+## Distribution analysis with dunning-t-digest
 
 `Baseline.hs` now keeps the raw per-run timings and computes percentiles with
-`tdigest`. A spike is defined as any value more than 2× the median.
+`dunning-t-digest`. A spike is defined as any value more than 2× the median.
 
 Representative run (100 runs, 100k list elements / 10M function-call iterations):
 
@@ -280,6 +280,6 @@ allocation + GC counts say *why the tail exists*.** Reach for all three.
 - **`circuits-meter` can resolve ~1 ns differences.** The `constUnitN` /
   `nothingN` delta is 1.4 ns; `monoSum` / `listLength` delta is 1.4 ns. This is
   the right granularity for measuring circuit primitives.
-- **Distribution matters, not just averages.** `tdigest` exposes the occasional
+- **Distribution matters, not just averages.** `dunning-t-digest` exposes the occasional
   multi-millisecond spike that a simple average would hide — and a fat tail is a
   question (*why?*), not just a number.
