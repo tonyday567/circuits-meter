@@ -48,29 +48,15 @@ library
     -Wall
     -Wcompat
 
-executable perf-bench
-  main-is: Main.hs
+executable circuits-meter-verify
+  main-is: Verify.hs
   hs-source-dirs: app
   build-depends:
     base >=4.20 && <5,
     circuits >=0.1 && <0.4,
     circuits-meter,
-    optparse-applicative >=0.18 && <0.20,
-
-  default-language: GHC2024
-  ghc-options:
-    -Wall
-    -Wcompat
-    -rtsopts
-
-executable nub
-  main-is: Nub.hs
-  hs-source-dirs: examples
-  build-depends:
-    base >=4.20 && <5,
-    circuits-meter,
-    containers >=0.6 && <0.9,
-    optparse-applicative >=0.18 && <0.20,
+    clock >=0.8 && <0.9,
+    deepseq >=1.4 && <1.6,
 
   default-language: GHC2024
   ghc-options:

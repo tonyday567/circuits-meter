@@ -111,6 +111,57 @@ meterIt (both timeX allocX) "chunk" :: Loop (,) (Kleisli IO) a (b, Watches (Nano
 
 Every stopwatch marker records nanoseconds and allocated bytes at that point.
 
+### allocX vs allocGC
+
+`allocX` reads `getRTSStats.allocated_bytes` — a cumulative counter that only
+updates at GC time. Allocations that fit in the nursery between GCs are
+invisible to it. It's fast but the numbers are a lagging indicator:
+
+```
+start allocX → 64 MB (counter frozen from last GC)
+... allocate 6 MB in nursery ...
+stop allocX  → 64 MB (counter unchanged — no GC ran)
+delta = 0
+```
+
+`allocGC` forces a major GC (`performGC`) at both start and stop boundaries.
+This gives accurate per-interval allocation at the cost of GC overhead:
+
+```
+start allocGC → GC → 0 MB (counter reset)
+... allocate 6 MB ...
+stop allocGC  → GC → 6 MB (counter updated by GC)
+delta = 6 MB
+```
+
+Use `allocX` for lightweight measurement where coarse numbers are acceptable.
+Use `allocGC` when you need accurate per-stage allocation and can tolerate the
+GC pauses. Both meters live in `Circuit.Meter.Space`.
+
+### The laziness experiment
+
+`circuits-meter-observe/app/Laziness.hs` demonstrates time+space metering on
+lazy / WHNF / NF evaluation of a 100k-element list:
+
+```
+=== time only ===
+drop:    51 µs   (thunk creation, pure allocation)
+WHNF:   280 µs   (spine forced, compute appears)
+count:  792 µs   (spine forced via fold)
+sum:   1.6 ms    (elements forced, compute increases)
+```
+
+With `both timeX allocGC` the space channel confirms the split: `drop` shows
+allocation with near-zero compute; `sum` shows compute with near-zero
+allocation. The stopwatch reveals *where* the work actually happens — and the
+space channel distinguishes allocation from computation.
+
+Run with `+RTS -T -RTS` to enable GC stats:
+
+```
+cabal run laziness -- +RTS -T -RTS
+```
+
 ## Words: the R&D laboratory
 
 The [words](https://github.com/tonyday567/words) project is where circuits-meter

@@ -8,6 +8,7 @@
 module Circuit.Meter.Space
   ( -- * Space meter
     allocX,
+    allocGC,
 
     -- * Types
     SpaceStats (..),
@@ -21,6 +22,7 @@ import Control.Category ((.))
 import Control.DeepSeq
 import Data.Word (Word32, Word64)
 import GHC.Stats
+import System.Mem (performGC)
 import Prelude hiding (id, (.))
 
 -- | Allocation statistics from the GHC RTS.
@@ -69,3 +71,22 @@ allocX =
         pure (s' - s)
     )
 {-# INLINEABLE allocX #-}
+
+-- | Measure allocated bytes with GC-forced boundaries.
+--
+-- Forces a major GC before reading the counter at both start and stop.
+-- This gives accurate per-interval allocation at the cost of GC overhead
+-- (a stop-the-world collection on every measurement boundary).
+--
+-- Use 'allocX' for lightweight (but potentially stale) measurements;
+-- use 'allocGC' when you need accurate per-stage numbers.
+allocGC :: Meter (Kleisli IO) Bytes Bytes
+allocGC =
+  mkMeter
+    (performGC >> fmap (Bytes . allocated_bytes) getRTSStats)
+    ( \s -> do
+        performGC
+        s' <- fmap (Bytes . allocated_bytes) getRTSStats
+        pure (s' - s)
+    )
+{-# INLINEABLE allocGC #-}
