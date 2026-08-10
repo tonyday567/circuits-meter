@@ -13,7 +13,4 @@ packages:
   ../markup-parse/markup-parse.cabal
   ../process-stats/process-stats.cabal
 
-constraints:
-  circuits >= 0.2
-
 write-ghc-environment-files: always
