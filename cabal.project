@@ -5,7 +5,7 @@ packages:
   ../chart-svg/chart-svg.cabal
   ../numhask-space/numhask-space.cabal
   ../numhask/numhask.cabal
-  ../numhask-diff/numhask-diff.cabal
+  ../circuits-diff/circuits-diff.cabal
   ../formatn/formatn.cabal
   ../harpie/harpie.cabal
   ../circuits-parser/circuits-parser.cabal
