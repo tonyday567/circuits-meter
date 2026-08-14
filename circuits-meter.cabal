@@ -36,7 +36,7 @@ library
 
   build-depends:
     base >=4.20 && <5,
-    circuits >=0.1 && <0.4,
+    circuits >=0.1 && <0.5,
     clock >=0.8 && <0.9,
     containers >=0.6 && <0.9,
     deepseq >=1.4 && <1.6,
@@ -53,7 +53,7 @@ executable circuits-meter-verify
   hs-source-dirs: app
   build-depends:
     base >=4.20 && <5,
-    circuits >=0.1 && <0.4,
+    circuits >=0.1 && <0.5,
     circuits-meter,
     clock >=0.8 && <0.9,
     deepseq >=1.4 && <1.6,

@@ -8,7 +8,6 @@ packages:
   ../numhask-diff/numhask-diff.cabal
   ../formatn/formatn.cabal
   ../harpie/harpie.cabal
-  ../harpie-numhask/harpie-numhask.cabal
   ../circuits-parser/circuits-parser.cabal
   ../markup-parse/markup-parse.cabal
   ../process-stats/process-stats.cabal
