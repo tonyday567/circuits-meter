@@ -8,8 +8,8 @@ import Circuit.Meter.Time (Nanos, reifyC, ticks, timeX)
 import Control.Arrow (Kleisli (..))
 import Control.Exception (evaluate)
 import Data.IORef
-import Prelude hiding (id, (.))
 import System.Exit (exitFailure, exitSuccess)
+import Prelude hiding (id, (.))
 
 mkCountingMeter :: IO (Meter (Kleisli IO) Int Int, IORef Int)
 mkCountingMeter = do
