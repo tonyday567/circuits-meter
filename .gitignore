@@ -15,3 +15,4 @@ other/charts/
 *.o
 *.hi
 *.dump-simpl
+/cabal.project.local*
