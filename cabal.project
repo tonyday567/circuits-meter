@@ -1,5 +1,3 @@
-packages:
-  circuits-meter.cabal
-  ../circuits/circuits.cabal
+packages: circuits-meter.cabal
 
 write-ghc-environment-files: always
