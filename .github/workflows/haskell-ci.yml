@@ -85,11 +85,6 @@ jobs:
       - name: Check cabal file
         run: cabal check
 
-      - name: Run benchmarks
-        if: matrix.os == 'ubuntu-latest' && matrix.ghc-version == '9.14'
-        run: |
-          cabal run perf-bench --ghc-options=-O2 -- --runs 10000 --warmup 500
-
       - name: cabal-docspec
         if: matrix.os == 'ubuntu-latest' && matrix.ghc-version == '9.14'
         run: |
