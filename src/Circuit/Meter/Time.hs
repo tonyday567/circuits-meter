@@ -41,7 +41,7 @@ module Circuit.Meter.Time
 where
 
 import Circuit
-import Circuit.Category (Category (..), Discrete (..))
+import Circuit.Category (Category (..))
 import Circuit.Meter
 import Control.Arrow
 import Control.DeepSeq
@@ -109,10 +109,7 @@ onceK m k = runKleisli (reifyC (meterAction m k))
 --
 -- Convenience alias for 'run' with @t = (,)@, used by the runners
 -- below to extract a 'Kleisli' from a metered circuit.
---
--- 'Discrete' is required because free 'Loop' folds discharge 'Ob' via
--- 'withOb' (kind-gen / 'Category'+'Ob' hierarchy).
-reifyC :: (Category arr, Traced (,) arr, Discrete arr, Ob arr a, Ob arr b) => Loop (,) arr a b -> arr a b
+reifyC :: (Category arr, Traced (,) arr) => Loop (,) arr a b -> arr a b
 reifyC = run
 {-# INLINEABLE reifyC #-}
 
