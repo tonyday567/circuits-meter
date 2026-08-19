@@ -4,7 +4,7 @@
 module Main where
 
 import Circuit.Meter (Meter (..), both, meterAction)
-import Circuit.Meter.Time (Nanos, reifyC, ticks, timeX)
+import Circuit.Meter.Time (reifyC, ticks, timeX)
 import Control.Arrow (Kleisli (..))
 import Control.Exception (evaluate)
 import Data.IORef

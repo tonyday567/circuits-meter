@@ -33,7 +33,7 @@ module Circuit.Meter.Stopwatch
 where
 
 import Circuit
-import Circuit.Category ((.), (.>))
+import Circuit.Category ((.))
 import Circuit.Meter (Meter)
 import Circuit.Meter qualified as Meter
 import Circuit.Meter.Time (Nanos, timeX)

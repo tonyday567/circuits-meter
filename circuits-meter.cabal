@@ -48,15 +48,12 @@ library
     -Wall
     -Wcompat
 
-executable circuits-meter-verify
-  main-is: Verify.hs
+executable circuits-meter-axioma
+  main-is: axioma.hs
   hs-source-dirs: app
   build-depends:
     base >=4.20 && <5,
-    circuits >=0.1 && <0.5,
     circuits-meter,
-    clock >=0.8 && <0.9,
-    deepseq >=1.4 && <1.6,
 
   default-language: GHC2024
   ghc-options:
