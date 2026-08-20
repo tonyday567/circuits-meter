@@ -36,11 +36,11 @@ library
 
   build-depends:
     base >=4.20 && <5,
-    circuits >=0.1 && <0.5,
+    circuits >=0.3 && <0.4,
     clock >=0.8 && <0.9,
     containers >=0.6 && <0.9,
     deepseq >=1.4 && <1.6,
-    profunctors >=5.6 && <5.7,
+    profunctors >=5.0 && <5.7,
 
   hs-source-dirs: src
   default-language: GHC2024
