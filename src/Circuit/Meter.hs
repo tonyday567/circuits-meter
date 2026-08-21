@@ -25,7 +25,6 @@ where
 import Circuit.Loop (Loop (..))
 import Control.Arrow
 import Control.Category
-import Control.DeepSeq
 import Data.Profunctor
 import Prelude hiding (id, (.))
 
@@ -43,9 +42,6 @@ data Meter arr a b = Meter
   { start :: arr () a,
     stop :: arr a b
   }
-
-instance NFData (Meter arr a b) where
-  rnf Meter {} = ()
 
 -- | Construct a 'Meter' from raw monadic actions.
 mkMeter :: m a -> (a -> m b) -> Meter (Kleisli m) a b

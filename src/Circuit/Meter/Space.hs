@@ -19,7 +19,6 @@ where
 import Circuit.Meter
 import Control.Arrow (Kleisli (..))
 import Control.Category ((.))
-import Control.DeepSeq
 import Data.Word (Word32, Word64)
 import GHC.Stats
 import System.Mem (performGC)
@@ -35,9 +34,6 @@ data SpaceStats = SpaceStats
   }
   deriving (Read, Show, Eq)
 
-instance NFData SpaceStats where
-  rnf (SpaceStats a c m g1 g2) = rnf a `seq` rnf c `seq` rnf m `seq` rnf g1 `seq` rnf g2
-
 instance Semigroup SpaceStats where
   (<>) = addSpace
 
@@ -51,9 +47,6 @@ addSpace (SpaceStats a1 c1 m1 g1 g1') (SpaceStats a2 c2 m2 g2 g2') =
 -- | Number of bytes.
 newtype Bytes = Bytes {unbytes :: Word64}
   deriving (Show, Read, Eq, Ord, Num, Real, Enum, Integral)
-
-instance NFData Bytes where
-  rnf (Bytes w) = rnf w
 
 instance Semigroup Bytes where
   (<>) = (+)

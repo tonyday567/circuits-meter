@@ -44,7 +44,6 @@ import Circuit
 import Circuit.Category (Category (..))
 import Circuit.Meter
 import Control.Arrow
-import Control.DeepSeq
 import Control.Exception
 import Control.Monad
 import Control.Monad.Fix
@@ -94,10 +93,10 @@ timeX =
 -- Single timing
 -- ---------------------------------------------------------------------------
 
--- | Measure a single call to a pure function. Forces the result to NF
+-- | Measure a single call to a pure function. Forces the result to WHNF
 -- inside the timed 'IO' action so the work cannot be floated out.
-once :: (NFData d) => Meter (Kleisli IO) a b -> (c -> d) -> c -> IO (b, d)
-once m f = runKleisli (reifyC (meterAction m (Kleisli (evaluate . force . f . hold))))
+once :: Meter (Kleisli IO) a b -> (c -> d) -> c -> IO (b, d)
+once m f = runKleisli (reifyC (meterAction m (Kleisli (evaluate . f . hold))))
 {-# INLINEABLE once #-}
 
 -- | Measure a single call to a Kleisli arrow.
@@ -114,7 +113,7 @@ reifyC = run
 {-# INLINEABLE reifyC #-}
 
 -- | Single timing of a pure function. Returns @(nanos, result)@.
-tick :: (NFData b) => (a -> b) -> a -> IO (Nanos, b)
+tick :: (a -> b) -> a -> IO (Nanos, b)
 tick = once timeX
 {-# INLINEABLE tick #-}
 
@@ -123,14 +122,14 @@ tick = once timeX
 -- ---------------------------------------------------------------------------
 
 -- | @n@ timings of the same function. Returns @( [nanos], lastResult )@.
-ticks :: (NFData b) => Int -> (a -> b) -> a -> IO ([Nanos], b)
+ticks :: Int -> (a -> b) -> a -> IO ([Nanos], b)
 ticks n f = runKleisli (timesC n timeX f)
 {-# INLINEABLE ticks #-}
 
 -- | @n@ timings collapsed to a single average nanosecond count.
 --
 -- The computation is run @n@ times; the total time is divided by @n@.
-ticksN :: (NFData b) => Int -> (a -> b) -> a -> IO (Nanos, b)
+ticksN :: Int -> (a -> b) -> a -> IO (Nanos, b)
 ticksN n f a = do
   (ts, b) <- ticks n f a
   pure (sum ts `div` fromIntegral n, b)
@@ -183,10 +182,10 @@ meterIO :: (a -> IO b) -> Loop t (Kleisli IO) a (Nanos, b)
 meterIO f = meterAction timeX (Kleisli f)
 {-# INLINEABLE meterIO #-}
 
--- | Meter a pure function with 'timeX'. Forces to NF inside the timed
+-- | Meter a pure function with 'timeX'. Forces to WHNF inside the timed
 -- bracket so the work cannot be floated out.
-meter :: (NFData b) => (a -> b) -> Loop t (Kleisli IO) a (Nanos, b)
-meter f = meterAction timeX (Kleisli (evaluate . force . f . hold))
+meter :: (a -> b) -> Loop t (Kleisli IO) a (Nanos, b)
+meter f = meterAction timeX (Kleisli (evaluate . f . hold))
 {-# INLINEABLE meter #-}
 
 -- ---------------------------------------------------------------------------
@@ -227,7 +226,7 @@ timesK w n m k = Kleisli \a -> do
 {-# NOINLINE timesK #-}
 
 -- | Lifted variant of 'timesK' for pure functions. Forces the result
--- to NF inside the timed 'IO' action so the work cannot be floated out.
-timesC :: (NFData d) => Int -> Meter (Kleisli IO) a b -> (c -> d) -> Kleisli IO c ([b], d)
-timesC n m f = timesK 100 n m (Kleisli (evaluate . force . f . hold))
+-- to WHNF inside the timed 'IO' action so the work cannot be floated out.
+timesC :: Int -> Meter (Kleisli IO) a b -> (c -> d) -> Kleisli IO c ([b], d)
+timesC n m f = timesK 100 n m (Kleisli (evaluate . f . hold))
 {-# INLINEABLE timesC #-}

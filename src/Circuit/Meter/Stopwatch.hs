@@ -38,7 +38,6 @@ import Circuit.Meter (Meter)
 import Circuit.Meter qualified as Meter
 import Circuit.Meter.Time (Nanos, timeX)
 import Control.Arrow (Kleisli (..), first)
-import Control.DeepSeq (NFData, force)
 import Control.Exception (evaluate)
 import Control.Monad (replicateM_)
 import Data.Map.Strict (Map)
@@ -120,9 +119,9 @@ timeIt = meterIt timeX
 --
 -- The stage is run @n@ times between 'start' and 'stop'; the recorded lap is
 -- the total time/space for all runs. Divide by @n@ for a per-iteration average.
--- The last result is kept and forced to NF; intermediate results are also forced
+-- The last result is kept and forced to WHNF; intermediate results are also forced
 -- so the work cannot be floated out of the loop.
-meterItN :: (NFData b) => Int -> Meter (Kleisli IO) x y -> String -> Kleisli IO a b -> Loop (,) (Kleisli IO) a (b, Watches x y)
+meterItN :: Int -> Meter (Kleisli IO) x y -> String -> Kleisli IO a b -> Loop (,) (Kleisli IO) a (b, Watches x y)
 meterItN n0 m name stage =
   start m name
     .> carry (Kleisli loop)
@@ -130,12 +129,12 @@ meterItN n0 m name stage =
   where
     n = max 1 n0
     loop a = do
-      b <- runKleisli stage a >>= evaluate . force
+      b <- runKleisli stage a >>= evaluate
       replicateM_ (n - 1) $ do
-        !_ <- runKleisli stage a >>= evaluate . force
+        !_ <- runKleisli stage a >>= evaluate
         pure ()
       pure b
 
 -- | 'meterItN' with the default time meter.
-timeItN :: (NFData b) => Int -> String -> Kleisli IO a b -> Loop (,) (Kleisli IO) a (b, Watches Nanos Nanos)
+timeItN :: Int -> String -> Kleisli IO a b -> Loop (,) (Kleisli IO) a (b, Watches Nanos Nanos)
 timeItN n = meterItN n timeX

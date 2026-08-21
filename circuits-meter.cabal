@@ -2,9 +2,13 @@ cabal-version: 3.0
 name: circuits-meter
 version: 0.1.0.0
 license: BSD-3-Clause
+license-file: LICENSE
+copyright: Tony Day (c) 2026
+category: performance
 author: Tony Day
 maintainer: tonyday567@gmail.com
-category: performance
+homepage: https://github.com/tonyday567/circuits-meter#readme
+bug-reports: https://github.com/tonyday567/circuits-meter/issues
 synopsis: Performance measurement as a Circuit
 description:
   Performance measurement reimagined as a traced monoidal category.
@@ -14,20 +18,32 @@ description:
   compose in parallel via 'both'. Includes a benchmark exercising
   the public runners against IORef and delimited-continuation controls.
 
-extra-doc-files:
-  readme.md
-
 build-type: Simple
 tested-with:
   ghc ==9.10.1
   ghc ==9.12.2
   ghc ==9.14.1
 
+extra-doc-files:
+  readme.md
+
 source-repository head
   type: git
   location: https://github.com/tonyday567/circuits-meter.git
 
+common ghc-options-stanza
+  ghc-options:
+    -Wall
+    -Wno-unused-imports
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+
 library
+  default-language: GHC2024
   exposed-modules:
     Circuit.Meter
     Circuit.Meter.Space
@@ -39,23 +55,21 @@ library
     circuits >=0.3 && <0.4,
     clock >=0.8 && <0.9,
     containers >=0.6 && <0.9,
-    deepseq >=1.4 && <1.6,
     profunctors >=5.0 && <5.7,
 
   hs-source-dirs: src
-  default-language: GHC2024
   ghc-options:
     -Wall
     -Wcompat
 
 executable circuits-meter-axioma
+  default-language: GHC2024
   main-is: axioma.hs
   hs-source-dirs: app
   build-depends:
     base >=4.20 && <5,
     circuits-meter,
 
-  default-language: GHC2024
   ghc-options:
     -Wall
     -Wcompat
