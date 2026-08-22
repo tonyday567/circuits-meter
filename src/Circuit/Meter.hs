@@ -22,9 +22,8 @@ module Circuit.Meter
   )
 where
 
+import Circuit.Category (Category (..), K (..))
 import Circuit.Loop (Loop (..))
-import Control.Arrow
-import Control.Category
 import Data.Profunctor
 import Prelude hiding (id, (.))
 
@@ -44,19 +43,19 @@ data Meter arr a b = Meter
   }
 
 -- | Construct a 'Meter' from raw monadic actions.
-mkMeter :: m a -> (a -> m b) -> Meter (Kleisli m) a b
-mkMeter pre post = Meter (Kleisli (const pre)) (Kleisli post)
+mkMeter :: m a -> (a -> m b) -> Meter (K m) a b
+mkMeter pre post = Meter (K (const pre)) (K post)
 {-# INLINEABLE mkMeter #-}
 
 -- | Run two meters simultaneously.
 --
 -- The state wires are independent; the @(,)@ tensor handles the
 -- wiring automatically.
-both :: (Arrow arr) => Meter arr a1 b1 -> Meter arr a2 b2 -> Meter arr (a1, a2) (b1, b2)
+both :: (Category arr, Strong arr) => Meter arr a1 b1 -> Meter arr a2 b2 -> Meter arr (a1, a2) (b1, b2)
 both m1 m2 =
   Meter
-    { start = start m1 &&& start m2,
-      stop = stop m1 *** stop m2
+    { start = dimap (\() -> ((), ())) id (first' (start m1) . second' (start m2)),
+      stop = first' (stop m1) . second' (stop m2)
     }
 {-# INLINEABLE both #-}
 

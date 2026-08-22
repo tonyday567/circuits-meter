@@ -4,20 +4,20 @@
 module Main where
 
 import Circuit.Meter (Meter (..), both, meterAction)
+import Circuit.Category (K (..))
 import Circuit.Meter.Time (reifyC, ticks, timeX)
-import Control.Arrow (Kleisli (..))
 import Control.Exception (evaluate)
 import Data.IORef
 import System.Exit (exitFailure, exitSuccess)
 import Prelude hiding (id, (.))
 
-mkCountingMeter :: IO (Meter (Kleisli IO) Int Int, IORef Int)
+mkCountingMeter :: IO (Meter (K IO) Int Int, IORef Int)
 mkCountingMeter = do
   ref <- newIORef 0
   pure
     ( Meter
-        { start = Kleisli \_ -> atomicModifyIORef' ref (\n -> (n + 1, n + 1)),
-          stop = Kleisli \prev -> atomicModifyIORef' ref (\n -> (n + 1, prev))
+        { start = K \_ -> atomicModifyIORef' ref (\n -> (n + 1, n + 1)),
+          stop = K \prev -> atomicModifyIORef' ref (\n -> (n + 1, prev))
         },
       ref
     )
@@ -25,9 +25,9 @@ mkCountingMeter = do
 v1 :: IO ()
 v1 = do
   (cnt, ref) <- mkCountingMeter
-  let f = Kleisli (\x -> pure (x + 1 :: Int))
+  let f = K (\x -> pure (x + 1 :: Int))
       metered = reifyC (meterAction cnt f)
-  _ <- runKleisli metered 5
+  _ <- runK metered 5
   n <- readIORef ref
   putStrLn "V1: meterAction fires start + stop exactly once"
   if n == 2
@@ -41,9 +41,9 @@ v2 = do
   (cnt1, ref1) <- mkCountingMeter
   (cnt2, ref2) <- mkCountingMeter
   let m = both cnt1 cnt2
-      f = Kleisli (\(x, y) -> pure (x + 1 :: Int, y * 2 :: Int))
+      f = K (\(x, y) -> pure (x + 1 :: Int, y * 2 :: Int))
       metered = reifyC (meterAction m f)
-  _ <- runKleisli metered (5, 10)
+  _ <- runK metered (5, 10)
   n1 <- readIORef ref1
   n2 <- readIORef ref2
   putStrLn "V2: both(m1, m2) fires both meters"
@@ -55,9 +55,9 @@ v2 = do
 
 v3 :: IO ()
 v3 = do
-  t0 <- runKleisli (start timeX) ()
+  t0 <- runK (start timeX) ()
   _ <- evaluate (sum [1 .. 10000 :: Int])
-  dt <- runKleisli (stop timeX) t0
+  dt <- runK (stop timeX) t0
   putStrLn "V3: timeX measures positive elapsed time"
   if dt > 0
     then putStrLn $ "  PASS: dt = " ++ show dt ++ "ns"

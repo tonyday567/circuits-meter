@@ -68,6 +68,7 @@ executable circuits-meter-axioma
   hs-source-dirs: app
   build-depends:
     base >=4.20 && <5,
+    circuits,
     circuits-meter,
 
   ghc-options:

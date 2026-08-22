@@ -16,8 +16,8 @@ module Circuit.Meter.Space
   )
 where
 
+import Circuit.Category (K (..))
 import Circuit.Meter
-import Control.Arrow (Kleisli (..))
 import Control.Category ((.))
 import Data.Word (Word32, Word64)
 import GHC.Stats
@@ -55,7 +55,7 @@ instance Monoid Bytes where
   mempty = 0
 
 -- | Measure only allocated bytes.
-allocX :: Meter (Kleisli IO) Bytes Bytes
+allocX :: Meter (K IO) Bytes Bytes
 allocX =
   mkMeter
     (fmap (Bytes . allocated_bytes) getRTSStats)
@@ -73,7 +73,7 @@ allocX =
 --
 -- Use 'allocX' for lightweight (but potentially stale) measurements;
 -- use 'allocGC' when you need accurate per-stage numbers.
-allocGC :: Meter (Kleisli IO) Bytes Bytes
+allocGC :: Meter (K IO) Bytes Bytes
 allocGC =
   mkMeter
     (performGC >> fmap (Bytes . allocated_bytes) getRTSStats)

@@ -42,8 +42,8 @@ where
 
 import Circuit
 import Circuit.Category (Category (..))
+import Circuit.Category (K (..))
 import Circuit.Meter
-import Control.Arrow
 import Control.Exception
 import Control.Monad
 import Control.Monad.Fix
@@ -79,7 +79,7 @@ nanos = toNanoSecs <$> getTime MonotonicRaw
 -- This is a stopwatch: 'start' captures the initial time, and each
 -- 'stop' reads the current clock and subtracts.  Calling 'stop' multiple
 -- times gives cumulative elapsed time since the single start.
-timeX :: Meter (Kleisli IO) Nanos Nanos
+timeX :: Meter (K IO) Nanos Nanos
 timeX =
   mkMeter
     nanos
@@ -95,19 +95,19 @@ timeX =
 
 -- | Measure a single call to a pure function. Forces the result to WHNF
 -- inside the timed 'IO' action so the work cannot be floated out.
-once :: Meter (Kleisli IO) a b -> (c -> d) -> c -> IO (b, d)
-once m f = runKleisli (reifyC (meterAction m (Kleisli (evaluate . f . hold))))
+once :: Meter (K IO) a b -> (c -> d) -> c -> IO (b, d)
+once m f = runK (reifyC (meterAction m (K (evaluate . f . hold))))
 {-# INLINEABLE once #-}
 
--- | Measure a single call to a Kleisli arrow.
-onceK :: (MonadFix m) => Meter (Kleisli m) a b -> Kleisli m c d -> c -> m (b, d)
-onceK m k = runKleisli (reifyC (meterAction m k))
+-- | Measure a single call to a K arrow.
+onceK :: (MonadFix m) => Meter (K m) a b -> K m c d -> c -> m (b, d)
+onceK m k = runK (reifyC (meterAction m k))
 {-# INLINEABLE onceK #-}
 
 -- | Reify a circuit using the cartesian tensor @(,)@.
 --
 -- Convenience alias for 'run' with @t = (,)@, used by the runners
--- below to extract a 'Kleisli' from a metered circuit.
+-- below to extract a 'K' from a metered circuit.
 reifyC :: (Category arr, Traced (,) arr) => Loop (,) arr a b -> arr a b
 reifyC = run
 {-# INLINEABLE reifyC #-}
@@ -123,7 +123,7 @@ tick = once timeX
 
 -- | @n@ timings of the same function. Returns @( [nanos], lastResult )@.
 ticks :: Int -> (a -> b) -> a -> IO ([Nanos], b)
-ticks n f = runKleisli (timesC n timeX f)
+ticks n f = runK (timesC n timeX f)
 {-# INLINEABLE ticks #-}
 
 -- | @n@ timings collapsed to a single average nanosecond count.
@@ -178,14 +178,14 @@ ticksION n action = do
 -- The result is a 'Circuit' polymorphic in the tensor @t@, so it can
 -- be lifted into pipelines using either @(,)@ (lazy knot-tying) or
 -- 'Either' (iteration) without changing the combinator.
-meterIO :: (a -> IO b) -> Loop t (Kleisli IO) a (Nanos, b)
-meterIO f = meterAction timeX (Kleisli f)
+meterIO :: (a -> IO b) -> Loop t (K IO) a (Nanos, b)
+meterIO f = meterAction timeX (K f)
 {-# INLINEABLE meterIO #-}
 
 -- | Meter a pure function with 'timeX'. Forces to WHNF inside the timed
 -- bracket so the work cannot be floated out.
-meter :: (a -> b) -> Loop t (Kleisli IO) a (Nanos, b)
-meter f = meterAction timeX (Kleisli (evaluate . f . hold))
+meter :: (a -> b) -> Loop t (K IO) a (Nanos, b)
+meter f = meterAction timeX (K (evaluate . f . hold))
 {-# INLINEABLE meter #-}
 
 -- ---------------------------------------------------------------------------
@@ -201,21 +201,21 @@ warmup n = replicateM_ n (void nanos)
 -- Repeated measurement runners
 -- ---------------------------------------------------------------------------
 
--- | Measure a 'Kleisli' arrow repeated @n@ times. Returns per-run
+-- | Measure a 'K' arrow repeated @n@ times. Returns per-run
 -- measurements and the last result.
 --
 -- The step is marked 'NOINLINE' so GHC cannot float the computation
 -- out of the timing loop.
 --
--- >>> import Control.Arrow (Kleisli(..))
+-- >>> import Circuit.Category (K(..))
 -- >>> import Circuit.Meter (Meter(..))
--- >>> let m = Meter (Kleisli $ \_ -> pure 0) (Kleisli $ \_ -> pure 0)
--- >>> runKleisli (timesK 100 3 m (Kleisli (pure . (*2)))) 5
+-- >>> let m = Meter (K $ \_ -> pure 0) (K $ \_ -> pure 0)
+-- >>> runK (timesK 100 3 m (K (pure . (*2)))) 5
 -- ([...,...,...],10)
-timesK :: Int -> Int -> Meter (Kleisli IO) a b -> Kleisli IO c d -> Kleisli IO c ([b], d)
-timesK w n m k = Kleisli \a -> do
+timesK :: Int -> Int -> Meter (K IO) a b -> K IO c d -> K IO c ([b], d)
+timesK w n m k = K \a -> do
   warmup w
-  let step !x = runKleisli (reifyC (meterAction m k)) x
+  let step !x = runK (reifyC (meterAction m k)) x
       go 1 !x acc = do
         (t, b) <- step x
         pure (reverse (t : acc), b)
@@ -227,6 +227,6 @@ timesK w n m k = Kleisli \a -> do
 
 -- | Lifted variant of 'timesK' for pure functions. Forces the result
 -- to WHNF inside the timed 'IO' action so the work cannot be floated out.
-timesC :: Int -> Meter (Kleisli IO) a b -> (c -> d) -> Kleisli IO c ([b], d)
-timesC n m f = timesK 100 n m (Kleisli (evaluate . f . hold))
+timesC :: Int -> Meter (K IO) a b -> (c -> d) -> K IO c ([b], d)
+timesC n m f = timesK 100 n m (K (evaluate . f . hold))
 {-# INLINEABLE timesC #-}
