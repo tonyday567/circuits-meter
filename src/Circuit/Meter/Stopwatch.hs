@@ -33,16 +33,15 @@ module Circuit.Meter.Stopwatch
 where
 
 import Circuit
-import Circuit.Category ((.))
+import Circuit.Category (K (..), (.))
 import Circuit.Meter (Meter)
 import Circuit.Meter qualified as Meter
-import Circuit.Category (K (..))
 import Circuit.Meter.Time (Nanos, timeX)
 import Control.Exception (evaluate)
-import Data.Profunctor (Strong (..))
 import Control.Monad (replicateM_)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Profunctor (Strong (..))
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------

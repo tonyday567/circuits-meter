@@ -3,8 +3,8 @@
 -- | Oracle: sanity checks for 'Circuit.Meter'.
 module Main where
 
-import Circuit.Meter (Meter (..), both, meterAction)
 import Circuit.Category (K (..))
+import Circuit.Meter (Meter (..), both, meterAction)
 import Circuit.Meter.Time (reifyC, ticks, timeX)
 import Control.Exception (evaluate)
 import Data.IORef

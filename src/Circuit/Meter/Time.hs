@@ -41,8 +41,7 @@ module Circuit.Meter.Time
 where
 
 import Circuit
-import Circuit.Category (Category (..))
-import Circuit.Category (K (..))
+import Circuit.Category (Category (..), K (..))
 import Circuit.Meter
 import Control.Exception
 import Control.Monad
