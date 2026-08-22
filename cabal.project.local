@@ -1,6 +1,0 @@
-packages:
-  ./circuits-meter.cabal
-  ../circuits/circuits.cabal
-  ../circuits-tools/circuits-tools.cabal
-
-write-ghc-environment-files: always
