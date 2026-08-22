@@ -55,7 +55,6 @@ library
     circuits >=0.3 && <0.4,
     clock >=0.8 && <0.9,
     containers >=0.6 && <0.9,
-    profunctors >=5.0 && <5.7,
 
   hs-source-dirs: src
   ghc-options:

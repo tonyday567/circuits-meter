@@ -11,6 +11,11 @@ module Circuit.Meter
     Meter (..),
     mkMeter,
 
+    -- * Cartesian helpers for Kleisli arrows
+    firstK,
+    secondK,
+    dimapK,
+
     -- * Meter composition
     both,
 
@@ -23,8 +28,7 @@ module Circuit.Meter
 where
 
 import Circuit.Category (Category (..), K (..))
-import Circuit.Loop (Loop (..))
-import Data.Profunctor
+import Circuit.Trace (Trace, base)
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
@@ -47,15 +51,34 @@ mkMeter :: m a -> (a -> m b) -> Meter (K m) a b
 mkMeter pre post = Meter (K (const pre)) (K post)
 {-# INLINEABLE mkMeter #-}
 
+-- ---------------------------------------------------------------------------
+-- Cartesian helpers for Kleisli arrows
+-- ---------------------------------------------------------------------------
+
+-- | First component for @K m@.
+firstK :: (Functor m) => K m a b -> K m (a, c) (b, c)
+firstK (K k) = K (\(a, c) -> fmap (\b -> (b, c)) (k a))
+{-# INLINEABLE firstK #-}
+
+-- | Second component for @K m@.
+secondK :: (Functor m) => K m a b -> K m (c, a) (c, b)
+secondK (K k) = K (\(c, a) -> fmap (\b -> (c, b)) (k a))
+{-# INLINEABLE secondK #-}
+
+-- | Profunctor-style pre/post composition for @K m@.
+dimapK :: (Functor m) => (a' -> a) -> (b -> b') -> K m a b -> K m a' b'
+dimapK f g (K k) = K (fmap g . k . f)
+{-# INLINEABLE dimapK #-}
+
 -- | Run two meters simultaneously.
 --
 -- The state wires are independent; the @(,)@ tensor handles the
 -- wiring automatically.
-both :: (Category arr, Strong arr) => Meter arr a1 b1 -> Meter arr a2 b2 -> Meter arr (a1, a2) (b1, b2)
+both :: (Monad m) => Meter (K m) a1 b1 -> Meter (K m) a2 b2 -> Meter (K m) (a1, a2) (b1, b2)
 both m1 m2 =
   Meter
-    { start = dimap (\() -> ((), ())) id (first' (start m1) . second' (start m2)),
-      stop = first' (stop m1) . second' (stop m2)
+    { start = dimapK (\() -> ((), ())) id (firstK (start m1) . secondK (start m2)),
+      stop = firstK (stop m1) . secondK (stop m2)
     }
 {-# INLINEABLE both #-}
 
@@ -63,17 +86,16 @@ both m1 m2 =
 -- Plugin metering
 -- ---------------------------------------------------------------------------
 
--- | Meter an arrow action, keeping the measurement.
+-- | Meter a Kleisli arrow action, keeping the measurement.
 --
 -- Tensor-agnostic: the bracket is built directly in the base arrow
--- and lifted with 'Arr', so it only needs 'Category' + 'Strong'.
--- The meter state is introduced and consumed locally; the result is
--- a 'Circuit' polymorphic in the tensor @t@.
+-- and lifted with 'base', so the meter state is introduced and consumed
+-- locally. The result is a 'Circuit' polymorphic in the tensor @t@.
 --
--- For arrow-level extraction, use 'run' with your chosen tensor.
-meterAction :: (Category arr, Strong arr) => Meter arr a b -> arr c d -> Loop t arr c (b, d)
+-- For arrow-level extraction, use 'eval' with your chosen tensor.
+meterAction :: (Monad m) => Meter (K m) a b -> K m c d -> Trace t (K m) c (b, d)
 meterAction m k =
-  Lift (first' (stop m) . second' k . dimap ((),) id (first' (start m)))
+  base (firstK (stop m) . secondK k . dimapK ((),) id (firstK (start m)))
 {-# INLINEABLE meterAction #-}
 
 -- | Hold back a value so GHC cannot float a function application past

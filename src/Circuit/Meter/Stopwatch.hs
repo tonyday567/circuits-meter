@@ -32,16 +32,16 @@ module Circuit.Meter.Stopwatch
   )
 where
 
-import Circuit
+import Circuit hiding (eval)
 import Circuit.Category (K (..), (.))
-import Circuit.Meter (Meter)
+import Circuit.Meter (Meter, firstK)
 import Circuit.Meter qualified as Meter
 import Circuit.Meter.Time (Nanos, timeX)
+import Circuit.Syntax (eval)
 import Control.Exception (evaluate)
 import Control.Monad (replicateM_)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Profunctor (Strong (..))
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
@@ -70,23 +70,23 @@ allLaps Watches {..} = Map.map reverse laps
 
 -- | Start a named watch. Sets the active watch and initializes the meter
 -- state for the first interval.
-start :: Meter (K IO) x y -> String -> Loop (,) (K IO) a (a, Watches x y)
-start m name = Lift $ K $ \a -> do
+start :: Meter (K IO) x y -> String -> Trace (,) (K IO) a (a, Watches x y)
+start m name = base $ K $ \a -> do
   x <- runK (Meter.start m) ()
   pure (a, Watches name x Map.empty)
 
 -- | Record a lap: stop the current interval, store the measurement under
 -- @label@, and start a fresh interval on the same active watch.
-lap :: Meter (K IO) x y -> String -> Loop (,) (K IO) (a, Watches x y) (a, Watches x y)
-lap m label = Lift $ K $ \(a, ws) -> do
+lap :: Meter (K IO) x y -> String -> Trace (,) (K IO) (a, Watches x y) (a, Watches x y)
+lap m label = base $ K $ \(a, ws) -> do
   y <- runK (Meter.stop m) (startState ws)
   x' <- runK (Meter.start m) ()
   pure (a, ws {startState = x', laps = Map.insertWith (++) label [y] (laps ws)})
 
 -- | Stop the active watch: record the final interval under @name@ and keep
 -- the log.
-stop :: Meter (K IO) x y -> String -> Loop (,) (K IO) (a, Watches x y) (a, Watches x y)
-stop m name = Lift $ K $ \(a, ws) -> do
+stop :: Meter (K IO) x y -> String -> Trace (,) (K IO) (a, Watches x y) (a, Watches x y)
+stop m name = base $ K $ \(a, ws) -> do
   y <- runK (Meter.stop m) (startState ws)
   pure (a, ws {laps = Map.insertWith (++) name [y] (laps ws)})
 
@@ -95,24 +95,24 @@ stop m name = Lift $ K $ \(a, ws) -> do
 -- ---------------------------------------------------------------------------
 
 -- | Lift a base arrow so it carries the timing wire unchanged.
-carry :: K IO a b -> Loop (,) (K IO) (a, Watches x y) (b, Watches x y)
-carry stage = Lift (first' stage)
+carry :: K IO a b -> Trace (,) (K IO) (a, Watches x y) (b, Watches x y)
+carry stage = base (firstK stage)
 
--- | Lift an already-built 'Loop' stage so it carries the timing wire
+-- | Lift an already-built 'Trace' stage so it carries the timing wire
 -- unchanged. The stage is run at its own tensor and then threaded through the
 -- cartesian timing wire.
-carryT :: (Traced t (K IO)) => Loop t (K IO) a b -> Loop (,) (K IO) (a, Watches x y) (b, Watches x y)
-carryT stage = Lift (first' (run stage))
+carryT :: (Traced t (K IO)) => Trace t (K IO) a b -> Trace (,) (K IO) (a, Watches x y) (b, Watches x y)
+carryT stage = base (firstK (eval stage))
 
 -- | Meter a single stage: start, run the stage, stop.
-meterIt :: Meter (K IO) x y -> String -> K IO a b -> Loop (,) (K IO) a (b, Watches x y)
+meterIt :: Meter (K IO) x y -> String -> K IO a b -> Trace (,) (K IO) a (b, Watches x y)
 meterIt m name stage =
   start m name
     .> carry stage
     .> stop m name
 
 -- | 'meterIt' with the default time meter.
-timeIt :: String -> K IO a b -> Loop (,) (K IO) a (b, Watches Nanos Nanos)
+timeIt :: String -> K IO a b -> Trace (,) (K IO) a (b, Watches Nanos Nanos)
 timeIt = meterIt timeX
 
 -- | Meter a stage over @n@ repetitions and record the total measurement.
@@ -121,7 +121,7 @@ timeIt = meterIt timeX
 -- the total time/space for all runs. Divide by @n@ for a per-iteration average.
 -- The last result is kept and forced to WHNF; intermediate results are also forced
 -- so the work cannot be floated out of the loop.
-meterItN :: Int -> Meter (K IO) x y -> String -> K IO a b -> Loop (,) (K IO) a (b, Watches x y)
+meterItN :: Int -> Meter (K IO) x y -> String -> K IO a b -> Trace (,) (K IO) a (b, Watches x y)
 meterItN n0 m name stage =
   start m name
     .> carry (K loop)
@@ -136,5 +136,5 @@ meterItN n0 m name stage =
       pure b
 
 -- | 'meterItN' with the default time meter.
-timeItN :: Int -> String -> K IO a b -> Loop (,) (K IO) a (b, Watches Nanos Nanos)
+timeItN :: Int -> String -> K IO a b -> Trace (,) (K IO) a (b, Watches Nanos Nanos)
 timeItN n = meterItN n timeX

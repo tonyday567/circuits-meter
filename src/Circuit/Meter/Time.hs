@@ -40,9 +40,11 @@ module Circuit.Meter.Time
   )
 where
 
-import Circuit
+import Circuit hiding (eval)
 import Circuit.Category (Category (..), K (..))
 import Circuit.Meter
+import Circuit.Syntax (eval)
+import Circuit.Trace (Trace, base)
 import Control.Exception
 import Control.Monad
 import Control.Monad.Fix
@@ -107,8 +109,8 @@ onceK m k = runK (reifyC (meterAction m k))
 --
 -- Convenience alias for 'run' with @t = (,)@, used by the runners
 -- below to extract a 'K' from a metered circuit.
-reifyC :: (Category arr, Traced (,) arr) => Loop (,) arr a b -> arr a b
-reifyC = run
+reifyC :: (Category arr, Traced (,) arr) => Trace (,) arr a b -> arr a b
+reifyC = eval
 {-# INLINEABLE reifyC #-}
 
 -- | Single timing of a pure function. Returns @(nanos, result)@.
@@ -177,13 +179,13 @@ ticksION n action = do
 -- The result is a 'Circuit' polymorphic in the tensor @t@, so it can
 -- be lifted into pipelines using either @(,)@ (lazy knot-tying) or
 -- 'Either' (iteration) without changing the combinator.
-meterIO :: (a -> IO b) -> Loop t (K IO) a (Nanos, b)
+meterIO :: (a -> IO b) -> Trace t (K IO) a (Nanos, b)
 meterIO f = meterAction timeX (K f)
 {-# INLINEABLE meterIO #-}
 
 -- | Meter a pure function with 'timeX'. Forces to WHNF inside the timed
 -- bracket so the work cannot be floated out.
-meter :: (a -> b) -> Loop t (K IO) a (Nanos, b)
+meter :: (a -> b) -> Trace t (K IO) a (Nanos, b)
 meter f = meterAction timeX (K (evaluate . f . hold))
 {-# INLINEABLE meter #-}
 
