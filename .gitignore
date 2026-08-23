@@ -15,3 +15,6 @@ other/charts/
 *.hi
 *.dump-simpl
 cabal.project.local
+*.ghc.environment.*
+.stack-work/
+.DS_Store
