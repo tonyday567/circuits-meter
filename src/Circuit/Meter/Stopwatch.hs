@@ -101,7 +101,7 @@ carry stage = base (firstK stage)
 -- | Lift an already-built 'Trace' stage so it carries the timing wire
 -- unchanged. The stage is run at its own tensor and then threaded through the
 -- cartesian timing wire.
-carryT :: (Traced t (K IO)) => Trace t (K IO) a b -> Trace (,) (K IO) (a, Watches x y) (b, Watches x y)
+carryT :: (Yank t (K IO)) => Trace t (K IO) a b -> Trace (,) (K IO) (a, Watches x y) (b, Watches x y)
 carryT stage = base (firstK (eval stage))
 
 -- | Meter a single stage: start, run the stage, stop.

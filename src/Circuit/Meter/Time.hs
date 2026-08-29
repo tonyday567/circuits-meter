@@ -44,7 +44,6 @@ import Circuit hiding (eval)
 import Circuit.Category (Category (..), K (..))
 import Circuit.Meter
 import Circuit.Syntax (eval)
-import Circuit.Trace (Trace, base)
 import Control.Exception
 import Control.Monad
 import Control.Monad.Fix
@@ -109,7 +108,7 @@ onceK m k = runK (reifyC (meterAction m k))
 --
 -- Convenience alias for 'run' with @t = (,)@, used by the runners
 -- below to extract a 'K' from a metered circuit.
-reifyC :: (Category arr, Traced (,) arr) => Trace (,) arr a b -> arr a b
+reifyC :: (Category arr, Yank (,) arr) => Trace (,) arr a b -> arr a b
 reifyC = eval
 {-# INLINEABLE reifyC #-}
 
