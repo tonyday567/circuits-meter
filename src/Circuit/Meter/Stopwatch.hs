@@ -33,7 +33,7 @@ module Circuit.Meter.Stopwatch
 where
 
 import Circuit hiding (eval)
-import Circuit.Category (K (..))
+import Circuit.Category ()
 import Circuit.Meter (Meter, firstK)
 import Circuit.Meter qualified as Meter
 import Circuit.Meter.Time (Nanos, timeX)

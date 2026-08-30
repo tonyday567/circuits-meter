@@ -41,7 +41,7 @@ module Circuit.Meter.Time
 where
 
 import Circuit hiding (eval)
-import Circuit.Category (Category (..), K (..))
+import Circuit.Category ()
 import Circuit.Meter
 import Circuit.Syntax (eval)
 import Control.Exception
@@ -215,12 +215,12 @@ warmup n = replicateM_ n (void nanos)
 timesK :: Int -> Int -> Meter (K IO) a b -> K IO c d -> K IO c ([b], d)
 timesK w n m k = K \a -> do
   warmup w
-  let step !x = runK (reifyC (meterAction m k)) x
+  let timeOnce !x = runK (reifyC (meterAction m k)) x
       go 1 !x acc = do
-        (t, b) <- step x
+        (t, b) <- timeOnce x
         pure (reverse (t : acc), b)
       go i !x acc = do
-        (t, _) <- step x
+        (t, _) <- timeOnce x
         go (i - 1) x (t : acc)
   go (max 1 n) a []
 {-# NOINLINE timesK #-}
