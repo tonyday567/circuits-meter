@@ -28,7 +28,8 @@ module Circuit.Meter
 where
 
 import Circuit.Category (Category (..), K (..))
-import Circuit.Trace (Trace, base)
+import Circuit.Syntax (Syntax (Lift))
+import Circuit.Trace (Trace)
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
@@ -89,13 +90,13 @@ both m1 m2 =
 -- | Meter a Kleisli arrow action, keeping the measurement.
 --
 -- Tensor-agnostic: the bracket is built directly in the base arrow
--- and lifted with 'base', so the meter state is introduced and consumed
+-- and lifted with 'Lift', so the meter state is introduced and consumed
 -- locally. The result is a 'Circuit' polymorphic in the tensor @t@.
 --
 -- For arrow-level extraction, use 'eval' with your chosen tensor.
 meterAction :: (Monad m) => Meter (K m) a b -> K m c d -> Trace t (K m) c (b, d)
 meterAction m k =
-  base (firstK (stop m) . secondK k . dimapK ((),) id (firstK (start m)))
+  Lift (firstK (stop m) . secondK k . dimapK ((),) id (firstK (start m)))
 {-# INLINEABLE meterAction #-}
 
 -- | Hold back a value so GHC cannot float a function application past

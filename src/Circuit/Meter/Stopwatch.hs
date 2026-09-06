@@ -35,6 +35,7 @@ where
 import Circuit hiding (eval)
 import Circuit.Category ()
 import Circuit.Meter (Meter, firstK)
+import Circuit.Syntax (Syntax (Lift))
 import Circuit.Meter qualified as Meter
 import Circuit.Meter.Time (Nanos, timeX)
 import Circuit.Syntax (eval)
@@ -71,14 +72,14 @@ allLaps Watches {..} = Map.map reverse laps
 -- | Start a named watch. Sets the active watch and initializes the meter
 -- state for the first interval.
 start :: Meter (K IO) x y -> String -> Trace (,) (K IO) a (a, Watches x y)
-start m name = base $ K $ \a -> do
+start m name = Lift $ K $ \a -> do
   x <- runK (Meter.start m) ()
   pure (a, Watches name x Map.empty)
 
 -- | Record a lap: stop the current interval, store the measurement under
 -- @label@, and start a fresh interval on the same active watch.
 lap :: Meter (K IO) x y -> String -> Trace (,) (K IO) (a, Watches x y) (a, Watches x y)
-lap m label = base $ K $ \(a, ws) -> do
+lap m label = Lift $ K $ \(a, ws) -> do
   y <- runK (Meter.stop m) (startState ws)
   x' <- runK (Meter.start m) ()
   pure (a, ws {startState = x', laps = Map.insertWith (++) label [y] (laps ws)})
@@ -86,7 +87,7 @@ lap m label = base $ K $ \(a, ws) -> do
 -- | Stop the active watch: record the final interval under @name@ and keep
 -- the log.
 stop :: Meter (K IO) x y -> String -> Trace (,) (K IO) (a, Watches x y) (a, Watches x y)
-stop m name = base $ K $ \(a, ws) -> do
+stop m name = Lift $ K $ \(a, ws) -> do
   y <- runK (Meter.stop m) (startState ws)
   pure (a, ws {laps = Map.insertWith (++) name [y] (laps ws)})
 
@@ -96,13 +97,13 @@ stop m name = base $ K $ \(a, ws) -> do
 
 -- | Lift a base arrow so it carries the timing wire unchanged.
 carry :: K IO a b -> Trace (,) (K IO) (a, Watches x y) (b, Watches x y)
-carry stage = base (firstK stage)
+carry stage = Lift (firstK stage)
 
 -- | Lift an already-built 'Trace' stage so it carries the timing wire
 -- unchanged. The stage is run at its own tensor and then threaded through the
 -- cartesian timing wire.
 carryT :: (Yank t (K IO)) => Trace t (K IO) a b -> Trace (,) (K IO) (a, Watches x y) (b, Watches x y)
-carryT stage = base (firstK (eval stage))
+carryT stage = Lift (firstK (eval stage))
 
 -- | Meter a single stage: start, run the stage, stop.
 meterIt :: Meter (K IO) x y -> String -> K IO a b -> Trace (,) (K IO) a (b, Watches x y)
