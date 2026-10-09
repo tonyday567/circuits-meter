@@ -118,6 +118,13 @@ mooreStream n =
   let os = scan (moore (+ 0) (\s a -> s + a) id) [1 .. n]
    in (length os, sum os, last os)
 
+-- * workload 0: plain list sum
+
+-- | The runner's minimal probe: sum [1..n], boxed Int, lazy list —
+-- nothing but list allocation, thunk forcing, and a left fold.
+sumlist :: Int -> (Int, Int)
+sumlist n = (sum [1 .. n], n)
+
 -- * main
 
 -- | Default: the full baseline table.  @--small@: one tiny size per
@@ -130,11 +137,13 @@ main = do
   case args of
     ["--small"] -> do
       putStrLn "circuits-meter-bench --small (end-to-end probe, tiny sizes)"
+      bench "sumlist" 2 12 sumlist [10000]
       bench "gf2" 2 12 gf2 [30]
       bench "netmelt" 2 12 netmelt [500]
       bench "moore" 2 12 mooreStream [10000]
     _ -> do
       putStrLn "circuits-meter-bench (GHC baseline; thc numbers to follow)"
+      bench "sumlist" 3 12 sumlist [10000, 100000]
       bench "gf2" 3 12 gf2 [120, 160, 200]
       bench "netmelt" 3 12 netmelt [20000, 40000]
       bench "moore" 3 12 mooreStream [300000, 600000]
