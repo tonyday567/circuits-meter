@@ -29,6 +29,7 @@ import Circuit
 import Circuit.Cellular (rrefRows)
 import Circuit.Meter.Time (ticksN)
 import Control.DeepSeq (NFData, force)
+import System.Environment (getArgs)
 import Prelude hiding (id, (.))
 
 -- * harness
@@ -119,9 +120,21 @@ mooreStream n =
 
 -- * main
 
+-- | Default: the full baseline table.  @--small@: one tiny size per
+-- workload — an end-to-end probe for a new runtime (thc), small enough
+-- to complete even at interpreter speeds.  Checksums differ from the
+-- full run (smaller inputs) but stay deterministic.
 main :: IO ()
 main = do
-  putStrLn "circuits-meter-bench (GHC baseline; thc numbers to follow)"
-  bench "gf2" 3 12 gf2 [120, 160, 200]
-  bench "netmelt" 3 12 netmelt [20000, 40000]
-  bench "moore" 3 12 mooreStream [300000, 600000]
+  args <- getArgs
+  case args of
+    ["--small"] -> do
+      putStrLn "circuits-meter-bench --small (end-to-end probe, tiny sizes)"
+      bench "gf2" 2 12 gf2 [30]
+      bench "netmelt" 2 12 netmelt [500]
+      bench "moore" 2 12 mooreStream [10000]
+    _ -> do
+      putStrLn "circuits-meter-bench (GHC baseline; thc numbers to follow)"
+      bench "gf2" 3 12 gf2 [120, 160, 200]
+      bench "netmelt" 3 12 netmelt [20000, 40000]
+      bench "moore" 3 12 mooreStream [300000, 600000]
