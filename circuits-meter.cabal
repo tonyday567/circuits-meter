@@ -61,6 +61,22 @@ library
     -Wall
     -Wcompat
 
+executable circuits-meter-bench
+  default-language: GHC2024
+  main-is: bench.hs
+  hs-source-dirs: app
+  build-depends:
+    base >=4.20 && <5,
+    circuits,
+    circuits-meter,
+    circuits-rel >=0.1 && <0.2,
+    deepseq >=1.4 && <1.6,
+
+  ghc-options:
+    -Wall
+    -Wcompat
+    -rtsopts
+
 executable circuits-meter-axioma
   default-language: GHC2024
   main-is: axioma.hs

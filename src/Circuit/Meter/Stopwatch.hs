@@ -32,13 +32,11 @@ module Circuit.Meter.Stopwatch
   )
 where
 
-import Circuit hiding (eval)
+import Circuit
 import Circuit.Category ()
 import Circuit.Meter (Meter, firstK)
-import Circuit.Syntax (Syntax (Lift))
 import Circuit.Meter qualified as Meter
 import Circuit.Meter.Time (Nanos, timeX)
-import Circuit.Syntax (eval)
 import Control.Exception (evaluate)
 import Control.Monad (replicateM_)
 import Data.Map.Strict (Map)
