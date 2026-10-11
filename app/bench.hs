@@ -11,7 +11,7 @@
 --   2. netmelt — build an SMC/Bimonoid Net and run (normalize) it
 --                (Circuit.Net/Circuit.Syntax): constructor churn.
 --   3. moore   — a long lazy list through scan . moore
---                (Circuit.GMachine): closure/thunk machinery.
+--                (Circuit.Machine): closure/thunk machinery.
 --
 -- Every workload prints a deterministic checksum alongside the timing,
 -- so the work is genuinely consumed and a future thc run must produce
