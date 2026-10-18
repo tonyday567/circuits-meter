@@ -20,6 +20,8 @@ module Circuit.Meter.Time
 
     -- * IO repeated timing
     ticksION,
+    ticksIO,
+    ticksIOWithWarmup,
 
     -- * Plugin metering
     meterIO,
@@ -163,6 +165,10 @@ ticksIOWithWarmup w n action = do
 {-# INLINEABLE ticksIOWithWarmup #-}
 
 -- | @n@ 'IO' timings collapsed to a single average nanosecond count.
+--
+-- Built on 'ticksIO', whose default warmup is 100 untimed iterations: the
+-- action runs @(100 + n)@ times in total. For workloads slower than ~ms,
+-- that multiplier surprises — use @'ticksIOWithWarmup' 0@ instead.
 ticksION :: Int -> IO a -> IO (Nanos, a)
 ticksION n action = do
   (ts, a) <- ticksIO n action
