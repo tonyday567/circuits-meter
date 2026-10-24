@@ -110,7 +110,7 @@ onceK m k = runK (reifyC (meterAction m k))
 --
 -- Convenience alias for 'run' with @t = (,)@, used by the runners
 -- below to extract a 'K' from a metered circuit.
-reifyC :: (Category arr, Yank (,) arr) => Trace (,) arr a b -> arr a b
+reifyC :: (Category arr, Trace (,) arr) => FreeTrace (,) arr a b -> arr a b
 reifyC = eval
 {-# INLINEABLE reifyC #-}
 
@@ -184,13 +184,13 @@ ticksION n action = do
 -- The result is a 'Circuit' polymorphic in the tensor @t@, so it can
 -- be lifted into pipelines using either @(,)@ (lazy knot-tying) or
 -- 'Either' (iteration) without changing the combinator.
-meterIO :: (a -> IO b) -> Trace t (K IO) a (Nanos, b)
+meterIO :: (a -> IO b) -> FreeTrace t (K IO) a (Nanos, b)
 meterIO f = meterAction timeX (K f)
 {-# INLINEABLE meterIO #-}
 
 -- | Meter a pure function with 'timeX'. Forces to WHNF inside the timed
 -- bracket so the work cannot be floated out.
-meter :: (a -> b) -> Trace t (K IO) a (Nanos, b)
+meter :: (a -> b) -> FreeTrace t (K IO) a (Nanos, b)
 meter f = meterAction timeX (K (evaluate . f . hold))
 {-# INLINEABLE meter #-}
 

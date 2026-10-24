@@ -86,7 +86,7 @@ allocX :: Meter (Kleisli IO) Bytes Bytes
 both timeX allocX :: Meter (Kleisli IO) (Nanos, Bytes) (Nanos, Bytes)
 
 -- Sandwich a Kleisli arrow between a meter's start and stop.
-meterAction timeX (Kleisli action) :: Trace t (Kleisli IO) a (Nanos, b)
+meterAction timeX (Kleisli action) :: FreeTrace t (Kleisli IO) a (Nanos, b)
 ```
 
 Custom meters are built with `mkMeter`:
@@ -108,7 +108,7 @@ import Circuit.Meter.Time (timeX)
 import Control.Arrow (Kleisli (..))
 import Control.Category ((>>>))
 
-pipeline :: Trace (,) (Kleisli IO) FilePath (String, Watches Nanos Nanos)
+pipeline :: FreeTrace (,) (Kleisli IO) FilePath (String, Watches Nanos Nanos)
 pipeline =
   start timeX "total"
     >>> carryT openf
@@ -127,7 +127,7 @@ pipeline =
   `label` and begins a fresh interval.
 - `stop m name` records the final interval under `name` and keeps the log.
 - `carry` lifts a Kleisli arrow while passing the timing wire through unchanged.
-- `carryT` lifts an existing `Trace` stage into the cartesian timing wire.
+- `carryT` lifts an existing `FreeTrace` stage into the cartesian timing wire.
 
 Force boundaries explicitly so laziness does not shift cost between stages:
 
@@ -163,7 +163,7 @@ carry (Kleisli (evaluate . force . f)) -- force to NF
 
 1. **clock overhead** — back-to-back `nanos` reads. Noise floor.
 2. **whileM_** — `IORef` counter loop. Control group.
-3. **trace-delim** — `Trace (Kleisli IO) Either` counting loop via
+3. **trace-delim** — `Trace Either (Kleisli IO)` counting loop via
    `prompt#`/`control0#`.
 4. **meterAction-loop** — the trace loop measured with `Circuit.Meter.meterAction`.
 5. **both** — simultaneous time + allocation on a single shot.
@@ -251,7 +251,7 @@ specialisation. For tight loops, the difference can be 2–5×.
 
 - **circuits** — free traced monoidal categories; `circuits-meter` builds on its
   `Trace` class and Kleisli instances.
-- **circuits-parser** — `Trace (->) Either` parsers.
+- **circuits-parser** — `Trace Either (->)` parsers.
 - **perf-circuits** — larger-scale circuit performance examples.
 
 ## further reading

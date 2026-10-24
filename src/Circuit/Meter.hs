@@ -29,7 +29,7 @@ where
 
 import Circuit.Category (Category (..), K (..))
 import Circuit.Syntax (Syntax (Lift))
-import Circuit.Trace (Trace)
+import Circuit.Trace (FreeTrace)
 import Prelude hiding (id, (.))
 
 -- ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ both m1 m2 =
 -- locally. The result is a 'Circuit' polymorphic in the tensor @t@.
 --
 -- For arrow-level extraction, use 'eval' with your chosen tensor.
-meterAction :: (Monad m) => Meter (K m) a b -> K m c d -> Trace t (K m) c (b, d)
+meterAction :: (Monad m) => Meter (K m) a b -> K m c d -> FreeTrace t (K m) c (b, d)
 meterAction m k =
   Lift (firstK (stop m) . secondK k . dimapK ((),) id (firstK (start m)))
 {-# INLINEABLE meterAction #-}
