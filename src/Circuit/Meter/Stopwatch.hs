@@ -10,7 +10,7 @@
 -- A single watch is active at any point. 'start' sets the active watch;
 -- 'lap' records an interval since the previous 'start' or 'lap' under a
 -- given label and starts a fresh interval on the same active watch;
--- 'stop' records the final interval and keeps the log.
+-- 'stop' records the enclosing interval since 'start' and keeps the log.
 module Circuit.Meter.Stopwatch
   ( -- * Timing log
     Watches,
@@ -47,10 +47,12 @@ import Prelude hiding (id, (.))
 -- Timing log
 -- ---------------------------------------------------------------------------
 
--- | Stopwatch state: the active watch name, the meter state for the current
--- in-flight interval, and the log of completed intervals.
+-- | Stopwatch state: the active watch name, the meter state for the
+-- enclosing watch and current in-flight interval, and the log of completed
+-- intervals.
 data Watches x y = Watches
   { active :: String,
+    origin :: x,
     startState :: x,
     laps :: Map String [y]
   }
@@ -68,11 +70,11 @@ allLaps Watches {..} = Map.map reverse laps
 -- ---------------------------------------------------------------------------
 
 -- | Start a named watch. Sets the active watch and initializes the meter
--- state for the first interval.
+-- state for the enclosing watch and first interval.
 start :: Meter (K IO) x y -> String -> FreeTrace (,) (K IO) a (a, Watches x y)
 start m name = Lift $ K $ \a -> do
   x <- runK (Meter.start m) ()
-  pure (a, Watches name x Map.empty)
+  pure (a, Watches name x x Map.empty)
 
 -- | Record a lap: stop the current interval, store the measurement under
 -- @label@, and start a fresh interval on the same active watch.
@@ -82,11 +84,12 @@ lap m label = Lift $ K $ \(a, ws) -> do
   x' <- runK (Meter.start m) ()
   pure (a, ws {startState = x', laps = Map.insertWith (++) label [y] (laps ws)})
 
--- | Stop the active watch: record the final interval under @name@ and keep
--- the log.
+-- | Stop the active watch: record the enclosing interval since 'start' under
+-- @name@ and keep the log. The current interval origin is retained, so later
+-- markers remain possible.
 stop :: Meter (K IO) x y -> String -> FreeTrace (,) (K IO) (a, Watches x y) (a, Watches x y)
 stop m name = Lift $ K $ \(a, ws) -> do
-  y <- runK (Meter.stop m) (startState ws)
+  y <- runK (Meter.stop m) (origin ws)
   pure (a, ws {laps = Map.insertWith (++) name [y] (laps ws)})
 
 -- ---------------------------------------------------------------------------

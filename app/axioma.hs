@@ -3,8 +3,10 @@
 -- | Oracle: sanity checks for 'Circuit.Meter'.
 module Main where
 
-import Circuit.Category (K (..))
+import Circuit.Category (K (..), (.>))
 import Circuit.Meter (Meter (..), both, meterAction)
+import Circuit.Meter.Stopwatch (Watches)
+import Circuit.Meter.Stopwatch qualified as Stopwatch
 import Circuit.Meter.Time (reifyC, ticks, timeX)
 import Control.Exception (evaluate)
 import Data.IORef
@@ -76,6 +78,90 @@ v4 = do
       putStrLn "  FAIL: negative measurement"
       exitFailure
 
+tickMeter :: IORef Int -> Meter (K IO) Int Int
+tickMeter ref =
+  Meter
+    { start = K \_ -> readIORef ref,
+      stop = K \origin -> subtract origin <$> readIORef ref
+    }
+
+gapMeter :: IORef Int -> Meter (K IO) Int Int
+gapMeter ref =
+  Meter
+    { start = K \_ -> readIORef ref,
+      stop = K \origin -> do
+        now <- readIORef ref
+        writeIORef ref (now + 1)
+        pure (now - origin)
+    }
+
+advance :: IORef Int -> Int -> K IO () ()
+advance ref n = K \_ -> modifyIORef' ref (+ n)
+
+checkLaps :: String -> Watches Int Int -> [(String, [Int])] -> IO ()
+checkLaps name ws expected = do
+  let actual = fmap (\(label, _) -> (label, Stopwatch.watchLaps ws label)) expected
+  putStrLn name
+  mapM_ (\(label, values) -> putStrLn $ "  " ++ label ++ "=" ++ show values) actual
+  if actual == expected
+    then putStrLn "  PASS"
+    else do
+      putStrLn $ "  FAIL: expected " ++ show expected
+      exitFailure
+
+v5 :: IO ()
+v5 = do
+  ref <- newIORef 0
+  let m = tickMeter ref
+      pipeline =
+        Stopwatch.start m "total"
+          .> Stopwatch.carry (advance ref 7)
+          .> Stopwatch.lap m "A"
+          .> Stopwatch.carry (advance ref 5)
+          .> Stopwatch.lap m "B"
+          .> Stopwatch.carry (advance ref 3)
+          .> Stopwatch.stop m "total"
+  (_, ws) <- runK (reifyC pipeline) ()
+  checkLaps "V5: stop records the enclosing interval" ws [("A", [7]), ("B", [5]), ("total", [15])]
+
+v6 :: IO ()
+v6 = do
+  ref <- newIORef 0
+  let m = tickMeter ref
+      pipeline =
+        Stopwatch.start m "total"
+          .> Stopwatch.carry (advance ref 11)
+          .> Stopwatch.stop m "total"
+  (_, ws) <- runK (reifyC pipeline) ()
+  checkLaps "V6: no-lap stop records the enclosing interval" ws [("total", [11])]
+
+v7 :: IO ()
+v7 = do
+  ref <- newIORef 0
+  let m = gapMeter ref
+      pipeline =
+        Stopwatch.start m "total"
+          .> Stopwatch.carry (advance ref 7)
+          .> Stopwatch.lap m "A"
+          .> Stopwatch.stop m "total"
+  (_, ws) <- runK (reifyC pipeline) ()
+  checkLaps "V7: one-tick lap restart gap is enclosed, not folded from laps" ws [("A", [7]), ("total", [8])]
+
+v8 :: IO ()
+v8 = do
+  ref <- newIORef 0
+  let m = tickMeter ref
+      pipeline =
+        Stopwatch.start m "total"
+          .> Stopwatch.carry (advance ref 4)
+          .> Stopwatch.lap m "A"
+          .> Stopwatch.carry (advance ref 3)
+          .> Stopwatch.stop m "total"
+          .> Stopwatch.carry (advance ref 2)
+          .> Stopwatch.lap m "after"
+  (_, ws) <- runK (reifyC pipeline) ()
+  checkLaps "V8: post-stop lap continues the segment origin retained by stop" ws [("A", [4]), ("total", [7]), ("after", [5])]
+
 main :: IO ()
 main = do
   putStrLn "circuits-meter-verify"
@@ -84,6 +170,10 @@ main = do
   v2
   v3
   v4
+  v5
+  v6
+  v7
+  v8
   putStrLn ""
   putStrLn "All verify assertions passed."
   exitSuccess
