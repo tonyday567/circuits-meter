@@ -54,11 +54,12 @@ allocation/GC stats or `+RTS -T` for `getRTSStatsEnabled` APIs.
 ```haskell
 import Circuit.Meter.Time
 
--- Time a single pure function call, forcing result to NF.
-tick :: (NFData b) => (a -> b) -> a -> IO (Nanos, b)
+-- Time a single pure function call, forcing its result to WHNF.
+-- Compose the function with 'force' when the benchmark needs an NF boundary.
+tick :: (a -> b) -> a -> IO (Nanos, b)
 
--- Time n calls and average.
-ticksN :: (NFData b) => Int -> (a -> b) -> a -> IO (Nanos, b)
+-- Time n calls and average, with the same WHNF boundary.
+ticksN :: Int -> (a -> b) -> a -> IO (Nanos, b)
 
 -- Time n IO actions and average.
 ticksION :: Int -> IO a -> IO (Nanos, a)
@@ -143,8 +144,9 @@ carry (Kleisli (evaluate . force . f)) -- force to NF
    compilation strategy. Always `cabal run` or `cabal build` with `-O2`.
 
 2. **Tight loop.** Measure one thing, many times. The `tick`/`ticksN` pattern
-   reads the clock, runs the action, forces the result to NF, reads the clock
-   again, and returns the delta.
+   reads the clock, runs the action, forces the result to WHNF, reads the clock
+   again, and returns the delta. Compose the subject with `force` when the
+   advertised work requires an NF result.
 
 3. **Warmup.** First measurements are cold (cache, GC nursery). `warmup 500-1000`
    before timing, or use `ticksN`/`ticksION` which include warmup.

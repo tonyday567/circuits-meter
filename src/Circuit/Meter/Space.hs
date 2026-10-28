@@ -54,7 +54,12 @@ instance Semigroup Bytes where
 instance Monoid Bytes where
   mempty = 0
 
--- | Measure only allocated bytes.
+-- | Measure the delta between two direct samples of the RTS cumulative
+-- @allocated_bytes@ counter. Requires @+RTS -T@.
+--
+-- No GC is forced at either boundary. The delta can therefore omit recent
+-- nursery allocation that is not yet visible in the RTS statistics sample;
+-- it is not a guaranteed total for the metered payload.
 allocX :: Meter (K IO) Bytes Bytes
 allocX =
   mkMeter
@@ -65,14 +70,13 @@ allocX =
     )
 {-# INLINEABLE allocX #-}
 
--- | Measure allocated bytes with GC-forced boundaries.
+-- | Measure the delta between two post-GC samples of the RTS cumulative
+-- @allocated_bytes@ counter. Requires @+RTS -T@.
 --
--- Forces a major GC before reading the counter at both start and stop.
--- This gives accurate per-interval allocation at the cost of GC overhead
--- (a stop-the-world collection on every measurement boundary).
---
--- Use 'allocX' for lightweight (but potentially stale) measurements;
--- use 'allocGC' when you need accurate per-stage numbers.
+-- 'performGC' runs before each sample, refreshing the statistics and adding
+-- GC overhead to the measured interval. The delta is not a guaranteed total
+-- for the metered payload: it can include instrumentation allocation and is
+-- affected by sharing and by work completed before the interval.
 allocGC :: Meter (K IO) Bytes Bytes
 allocGC =
   mkMeter

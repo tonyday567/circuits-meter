@@ -109,7 +109,8 @@ import Circuit.Meter (both)
 meterIt (both timeX allocX) "chunk" :: Loop (,) (Kleisli IO) a (b, Watches (Nanos, Bytes) (Nanos, Bytes))
 ```
 
-Every stopwatch marker records nanoseconds and allocated bytes at that point.
+Every stopwatch marker records nanoseconds and a delta of the RTS allocation
+counter at that point.
 
 ### allocX vs allocGC
 
@@ -124,37 +125,38 @@ stop allocX  → 64 MB (counter unchanged — no GC ran)
 delta = 0
 ```
 
-`allocGC` forces a major GC (`performGC`) at both start and stop boundaries.
-This gives accurate per-interval allocation at the cost of GC overhead:
+`allocGC` forces a major GC (`performGC`) before each counter read. This
+refreshes both samples at the cost of GC overhead. The result is the movement
+between two post-GC views of the cumulative counter, not a guaranteed total for
+the metered payload:
 
 ```
-start allocGC → GC → 0 MB (counter reset)
+start allocGC → GC → 64 MB
 ... allocate 6 MB ...
-stop allocGC  → GC → 6 MB (counter updated by GC)
+stop allocGC  → GC → 70 MB
 delta = 6 MB
 ```
 
-Use `allocX` for lightweight measurement where coarse numbers are acceptable.
-Use `allocGC` when you need accurate per-stage allocation and can tolerate the
-GC pauses. Both meters live in `Circuit.Meter.Space`.
+Use `allocX` for lightweight direct samples and `allocGC` for post-GC samples.
+Sharing, instrumentation, and work outside the interval can affect what those
+deltas mean. Both meters live in `Circuit.Meter.Space` and require `+RTS -T`.
 
 ### The laziness experiment
 
-`circuits-meter-observe/app/Laziness.hs` demonstrates time+space metering on
+`circuits-meter-machina/app/Laziness.hs` demonstrates time+space metering on
 lazy / WHNF / NF evaluation of a 100k-element list:
 
 ```
 === time only ===
-drop:    51 µs   (thunk creation, pure allocation)
-WHNF:   280 µs   (spine forced, compute appears)
+drop:    51 µs   (list left unevaluated)
+WHNF:   280 µs   (spine forced)
 count:  792 µs   (spine forced via fold)
-sum:   1.6 ms    (elements forced, compute increases)
+sum:   1.6 ms    (elements forced)
 ```
 
-With `both timeX allocGC` the space channel confirms the split: `drop` shows
-allocation with near-zero compute; `sum` shows compute with near-zero
-allocation. The stopwatch reveals *where* the work actually happens — and the
-space channel distinguishes allocation from computation.
+With `both timeX allocGC` the allocation column contains post-GC counter
+deltas, not workload totals; it cannot isolate allocation from computation.
+The time rows show where the forcing boundaries occur.
 
 Run with `+RTS -T -RTS` to enable GC stats:
 
