@@ -12,6 +12,7 @@ import Control.Exception (evaluate)
 import Data.IORef
 import Data.Map.Strict qualified as Map
 import GHC.Stats (getRTSStatsEnabled)
+import System.Clock (TimeSpec (..))
 import System.Exit (exitFailure)
 
 checkEqual :: (Eq a, Show a) => String -> a -> a -> IO ()
@@ -23,17 +24,40 @@ checkEqual name expected actual = do
       putStrLn $ "  FAIL: expected " ++ show expected ++ ", got " ++ show actual
       exitFailure
 
+listMeter :: Meter IO [Int] Int [Int]
+listMeter =
+  Body
+    (K \a -> pure [a])
+    (K \(ch, a) -> pure (ch <> [a]))
+    (K \ch -> pure (Const ch))
+
 v1 :: IO ()
 v1 = do
-  result <- oneShot (count (+ 1)) (41 :: Int)
-  checkEqual "V1: one-shot handles the first input" (1, 42) result
+  single <- nShot 1 listMeter (41 :: Int)
+  result <- nShot 4 listMeter 41
+  empty <- nShot 0 listMeter 41
+  negative <- nShot (-1) listMeter 41
+  checkEqual
+    "V1: n-shot handles the first input and empty counts"
+    (Just [41], Just (replicate 4 41), Nothing, Nothing)
+    (single, result, empty, negative)
 
 v2 :: IO ()
 v2 = do
-  single <- nShot 1 (count (+ 1)) (41 :: Int)
-  result <- nShot 4 (count (+ 1)) (41 :: Int)
-  empty <- nShot 0 (count (+ 1)) (41 :: Int)
-  checkEqual "V2: n-shot counts every input and zero stays empty" (Just (1, 42), Just (4, 42), Nothing) (single, result, empty)
+  emits <- newIORef (0 :: Int)
+  let meter =
+        Body
+          (K \a -> pure a)
+          (K \(ch, a) -> pure (ch + a))
+          ( K \ch -> do
+              modifyIORef' emits (+ 1)
+              pure (Const ch)
+          )
+  one <- nShot 1 meter (2 :: Int)
+  multiple <- nShot 3 meter 2
+  empty <- nShot 0 meter 2
+  emitCount <- readIORef emits
+  checkEqual "V2: n-shot emits once per non-empty run" (Just 2, Just 6, Nothing, 2) (one, multiple, empty, emitCount)
 
 v3 :: IO ()
 v3 = do
@@ -48,53 +72,12 @@ v3 = do
 
 v4 :: IO ()
 v4 = do
-  result <- nShot 3 (observe (\_ b -> b) (+ 1)) (41 :: Int)
-  checkEqual "V4: observations are ordered and the latest result is direct" (Just ([42, 42, 42], 42)) result
-
-v5 :: IO ()
-v5 = do
-  (_, initial) <- namedN 3 fst "raw" (count (const ())) () Map.empty
-  (result, observations) <- namedN 2 fst "raw" (count (const ())) () initial
-  (empty, unchanged) <- namedN 0 fst "raw" (count (const ())) () observations
+  before <- stamp
+  after <- stamp
   checkEqual
-    "V5: named samples prepend in constant time and empty runs add nothing"
-    (Just (2, ()), Map.fromList [("raw", [2, 3])], Nothing, observations)
-    (result, observations, empty, unchanged)
-
-v6 :: IO ()
-v6 = do
-  let meter = count (const ())
-      done (n, _) = n >= (3 :: Int)
-  converged <- converge 5 done meter (repeat ())
-  exhausted <- converge 2 done meter (repeat ())
-  atLimit <- converge 3 done meter (repeat ())
-  immediate <- converge 1 (const True) meter [()]
-  checkEqual
-    "V6: convergence handles success before, at, and beyond exact fuel"
-    ( "Left (3,())",
-      "Right \"function did not converge after 2 iterations\"",
-      "Left (3,())",
-      "Left (1,())"
-    )
-    (show converged, show exhausted, show atLimit, show immediate)
-
-v7 :: IO ()
-v7 = do
-  emits <- newIORef (0 :: Int)
-  let meter =
-        Body
-          (K \a -> pure a)
-          (K \(ch, a) -> pure (ch + a))
-          ( K \ch -> do
-              modifyIORef' emits (+ 1)
-              pure (Const ch)
-          )
-  single <- oneShot meter (2 :: Int)
-  one <- nShot 1 meter 2
-  multiple <- nShot 3 meter 2
-  empty <- nShot 0 meter 2
-  emitCount <- readIORef emits
-  checkEqual "V7: runners emit once per non-empty run" (2, Just 2, Just 6, Nothing, 3) (single, one, multiple, empty, emitCount)
+    "V4: raw timestamps expose elapsed arithmetic and monotonic readings"
+    (Nanos 200000000, True)
+    (elapsed (TimeSpec 1 900000000) (TimeSpec 2 100000000), elapsed before after >= 0)
 
 tickBracket :: IORef Int -> Bracket IO Int Int
 tickBracket ref =
@@ -116,8 +99,8 @@ gapBracket ref =
 advance :: IORef Int -> Int -> K IO () ()
 advance ref n = K \_ -> modifyIORef' ref (+ n)
 
-v8 :: IO ()
-v8 = do
+v5 :: IO ()
+v5 = do
   ref <- newIORef 0
   let meter = tickBracket ref
       pipeline =
@@ -129,26 +112,26 @@ v8 = do
           .> carry (advance ref 3)
           .> stop meter "total"
   (_, ws) <- runK (eval pipeline) ()
-  checkEqual "V8: pipeline records labelled laps and the enclosing total" (Map.fromList [("A", [7]), ("B", [5]), ("total", [15])]) (laps ws)
+  checkEqual "V5: pipeline records labelled laps and the enclosing total" (Map.fromList [("A", [7]), ("B", [5]), ("total", [15])]) (laps ws)
 
-v9 :: IO ()
-v9 = do
+v6 :: IO ()
+v6 = do
   ref <- newIORef 0
   let meter = tickBracket ref
       pipeline = start meter .> carry (advance ref 11) .> stop meter "total"
   (_, ws) <- runK (eval pipeline) ()
-  checkEqual "V9: a pipeline with no laps still records its total" (Map.fromList [("total", [11])]) (laps ws)
+  checkEqual "V6: a pipeline with no laps still records its total" (Map.fromList [("total", [11])]) (laps ws)
 
-v10 :: IO ()
-v10 = do
+v7 :: IO ()
+v7 = do
   ref <- newIORef 0
   let meter = gapBracket ref
       pipeline = start meter .> carry (advance ref 7) .> lap meter "A" .> stop meter "total"
   (_, ws) <- runK (eval pipeline) ()
-  checkEqual "V10: total encloses the lap restart gap" (Map.fromList [("A", [7]), ("total", [8])]) (laps ws)
+  checkEqual "V7: total encloses the lap restart gap" (Map.fromList [("A", [7]), ("total", [8])]) (laps ws)
 
-v11 :: IO ()
-v11 = do
+v8 :: IO ()
+v8 = do
   ref <- newIORef 0
   let meter = tickBracket ref
       pipeline =
@@ -159,25 +142,63 @@ v11 = do
           .> lap meter "A"
           .> stop meter "total"
   (_, ws) <- runK (eval pipeline) ()
-  checkEqual "V11: repeated labels retain chronological order" (Map.fromList [("A", [1, 2]), ("total", [3])], [1, 2]) (laps ws, lapsFor "A" ws)
+  checkEqual "V8: repeated labels retain chronological order" (Map.fromList [("A", [1, 2]), ("total", [3])], [1, 2]) (laps ws, lapsFor "A" ws)
 
-v12 :: IO ()
-v12 = do
+v9 :: IO ()
+v9 = do
   enabled <- getRTSStatsEnabled
   if not enabled
-    then putStrLn "V12: time+space samples skipped; rerun with +RTS -T"
+    then putStrLn "V9: raw time+space samples skipped; rerun with +RTS -T"
     else do
       result <- nShot 3 (timeSpaceIO (evaluate . (+ 1))) (41 :: Int)
       case result of
         Just (samples, 42) ->
-          checkEqual "V12: time+space observes every application and the latest result" (3, True) (length samples, all ((>= 0) . fst) samples)
+          checkEqual "V9: raw time+space observes every application and latest result" (3, True) (length samples, all ((>= 0) . fst) samples)
         _ -> do
-          putStrLn "V12: time+space observes every application and the latest result"
+          putStrLn "V9: raw time+space observes every application and latest result"
           putStrLn "  FAIL: unexpected result"
           exitFailure
+
+v10 :: IO ()
+v10 = do
+  enabled <- getRTSStatsEnabled
+  if not enabled
+    then putStrLn "V10: GC-forced repeated samples skipped; rerun with +RTS -T"
+    else do
+      space <- nShot 2 (spaceGCIO (evaluate . (+ 1))) (41 :: Int)
+      both <- nShot 2 (timeSpaceGCIO (evaluate . (+ 1))) (41 :: Int)
+      case (space, both) of
+        (Just (spaceSamples, 42), Just (bothSamples, 42)) ->
+          checkEqual "V10: GC-forced repeated meters observe every application" (2, 2, True) (length spaceSamples, length bothSamples, all ((>= 0) . fst) bothSamples)
+        _ -> do
+          putStrLn "V10: GC-forced repeated meters observe every application"
+          putStrLn "  FAIL: unexpected result"
+          exitFailure
+
+v11 :: IO ()
+v11 = do
+  enabled <- getRTSStatsEnabled
+  if not enabled
+    then putStrLn "V11: GC-forced pipeline samples skipped; rerun with +RTS -T"
+    else do
+      (_, allocWs) <- runK (eval (start allocationGC .> stop allocationGC "total")) ()
+      (_, bothWs) <- runK (eval (start timeSpaceGC .> stop timeSpaceGC "total")) ()
+      checkEqual "V11: GC-forced pipeline instruments record enclosing totals" (["total"], ["total"]) (Map.keys (laps allocWs), Map.keys (laps bothWs))
+
+v12 :: IO ()
+v12 = do
+  calls <- newIORef (0 :: Int)
+  let payload () = modifyIORef' calls (+ 1)
+  warmupPayload 3 payload ()
+  warmupPayload 0 payload ()
+  warmupPayload (-2) payload ()
+  warmupClock 2
+  warmupClock 0
+  actual <- readIORef calls
+  checkEqual "V12: warmup kinds stay separate and payload counts are exact" 3 actual
 
 main :: IO ()
 main = do
   putStrLn "circuits-meter-axioma"
   mapM_ (\v -> v >> putStrLn "") [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12]
-  putStrLn "All meter witnesses passed."
+  putStrLn "All 12 meter witnesses passed."

@@ -94,7 +94,7 @@ jobs:
       - name: Build
         run: cabal --project-file=cabal.project.ci build all
 
-      - name: Meter witnesses
+      - name: 12 meter witnesses
         run: cabal --project-file=cabal.project.ci run circuits-meter-axioma -- +RTS -T
 
       - name: Check cabal file
