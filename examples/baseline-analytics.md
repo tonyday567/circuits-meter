@@ -1,5 +1,9 @@
 # circuits-meter baseline analytics
 
+> **Historical record:** these measurements and commands predate the unified
+> `Circuit.Meter` replacement. The named executables are not current core targets;
+> retain the data as a measurement witness rather than runnable package instructions.
+
 Calibration data for Haskell performance measurement using the public
 `circuits-meter` API. All numbers are from an Apple M4 Pro, GHC 9.14.1,
 `clang -O2`, `CLOCK_MONOTONIC_RAW`.

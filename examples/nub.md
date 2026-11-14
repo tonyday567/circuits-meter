@@ -1,5 +1,9 @@
 # `List.nub` — the O(n²) reference shape
 
+> **Historical record:** the commands and `Circuit.Meter.Time` reference below
+> predate the unified `Circuit.Meter` replacement. The measurements remain a
+> reference shape; the current recursion experiments live in `perf-explore`.
+
 > When the order is `O(n²)`, the meter shows a cliff — and the least-squares
 > fit lands R² ≈ 1.
 

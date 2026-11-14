@@ -1,210 +1,77 @@
 # circuits-meter
 
-Performance measurement as a `Circuit`.
+Performance measurement as an input-seeded circuit machine, with labelled pipeline observations.
 
-A `Meter` is a pair of arrows: one captures state before a computation, one
-observes it after. `meterAction` sandwiches your payload between them, giving you
-a `Loop` (a trace-ready circuit) polymorphic in the tensor. Time and allocation
-meters compose in parallel via `both`.
+`Circuit.Meter` is self-contained. Its `Meter` is a diagonal `Circuit.Machine.Body`: `init` handles the first input, `commit` handles later inputs, and `emit` observes the final fresh channel.
 
-## The four things you call
-
-```haskell
-import Circuit.Meter.Time
-
--- 1. Time a single pure function call.
-tick :: (NFData b) => (a -> b) -> a -> IO (Nanos, b)
-
--- 2. Time n calls and average.
-ticksN :: (NFData b) => Int -> (a -> b) -> a -> IO (Nanos, b)
-
--- 3. Time n IO actions and average (100 warmup calls first).
-ticksION :: Int -> IO a -> IO (Nanos, a)
-
--- 4. Time and allocation together.
-both timeX allocX :: Meter (Kleisli IO) (Nanos, Bytes) (Nanos, Bytes)
-```
-
-For per-run distributions use `ticks` (pure) or `timesK` (Kleisli). For custom
-meters, build a `Meter` with `mkMeter` and wrap your arrow with `meterAction`.
-
-## Stopwatch pipelines
-
-Drop named markers into a left-to-right pipeline and the timing log rides
-alongside the payload on a `(,)` wire. This is where you see laziness effects
-directly — cost that should be on one interval slides into another and the meter
-makes it explicit.
-
-```haskell
-import Circuit
-import Circuit.Category ((.>))
-import Circuit.Meter.Stopwatch
-import Circuit.Meter.Time (timeX)
-import Control.Arrow (Kleisli (..))
-
-wordPipeline :: Loop (,) (Kleisli IO) FilePath (String, Watches Nanos Nanos)
-wordPipeline =
-  start timeX "total"
-    .> carryT openf
-    .> lap timeX "opened"
-    .> carryT readAndCount
-    .> carry forceMap          -- stop laziness from shifting cost
-    .> lap timeX "read"
-    .> carry post
-    .> lap timeX "closed"
-    .> carryT formatfForced
-    .> stop timeX "total"
-```
-
-Without the `forceMap` stage the counting work is lazy, so it's forced later by
-`formatfForced` and appears under "total":
-
-| interval | without forceMap | with forceMap |
-|---|---|---|
-| opened  | 0.56 ms | 0.30 ms |
-| read    | 3.52 ms | **51.28 ms** |
-| closed  | 0.01 ms | 0.01 ms |
-| total   | **50.31 ms** | 0.54 ms |
-
-The stopwatch wire makes the shift explicit: the same program, with one extra
-`force` point, reports a completely different bottleneck.
-
-## Laziness, WHNF, NF
-
-The library doesn't decide how much to force. That's just another Kleisli stage
-between markers:
-
-```haskell
-carry (Kleisli (pure . f))                  -- return a thunk
-carry (Kleisli (evaluate . f))              -- force to WHNF
-carry (Kleisli (evaluate . force . f))      -- force to NF
-```
-
-This keeps maximum visibility: you choose the evaluation boundary, and the meter
-records what happens there.
-
-## Function-composition experiment
-
-The same marker style exposes fusion. Compare separate stages against a fused
-composition on 100,000 words:
-
-| variant | split | lower | filter | total |
-|---|---|---|---|---|
-| separate, force at end | <0.001 ms | <0.001 ms | <0.001 ms | **448 ms** |
-| separate, force between | 316 ms | 119 ms | 23 ms | 458 ms |
-| fused, single force | — | — | — | **329 ms** |
-
-Without intermediate forces all cost collapses into the final stop. With forces
-the cost distributes across stages. The fused version is faster because GHC can
-combine `splitWords >>> lowerWords >>> noEmpties` into a single pass.
-
-## Space analytics
-
-Replace `timeX` with `allocX` or combine them with `both`:
-
-```haskell
-import Circuit.Meter.Space
-import Circuit.Meter (both)
-
-meterIt (both timeX allocX) "chunk" :: Loop (,) (Kleisli IO) a (b, Watches (Nanos, Bytes) (Nanos, Bytes))
-```
-
-Every stopwatch marker records nanoseconds and a delta of the RTS allocation
-counter at that point.
-
-### allocX vs allocGC
-
-`allocX` reads `getRTSStats.allocated_bytes` — a cumulative counter that only
-updates at GC time. Allocations that fit in the nursery between GCs are
-invisible to it. It's fast but the numbers are a lagging indicator:
-
-```
-start allocX → 64 MB (counter frozen from last GC)
-... allocate 6 MB in nursery ...
-stop allocX  → 64 MB (counter unchanged — no GC ran)
-delta = 0
-```
-
-`allocGC` forces a major GC (`performGC`) before each counter read. This
-refreshes both samples at the cost of GC overhead. The result is the movement
-between two post-GC views of the cumulative counter, not a guaranteed total for
-the metered payload:
-
-```
-start allocGC → GC → 64 MB
-... allocate 6 MB ...
-stop allocGC  → GC → 70 MB
-delta = 6 MB
-```
-
-Use `allocX` for lightweight direct samples and `allocGC` for post-GC samples.
-Sharing, instrumentation, and work outside the interval can affect what those
-deltas mean. Both meters live in `Circuit.Meter.Space` and require `+RTS -T`.
-
-### The laziness experiment
-
-`circuits-meter-machina/app/Laziness.hs` demonstrates time+space metering on
-lazy / WHNF / NF evaluation of a 100k-element list:
-
-```
-=== time only ===
-drop:    51 µs   (list left unevaluated)
-WHNF:   280 µs   (spine forced)
-count:  792 µs   (spine forced via fold)
-sum:   1.6 ms    (elements forced)
-```
-
-With `both timeX allocGC` the allocation column contains post-GC counter
-deltas, not workload totals; it cannot isolate allocation from computation.
-The time rows show where the forcing boundaries occur.
-
-Run with `+RTS -T -RTS` to enable GC stats:
-
-```
-cabal run laziness -- +RTS -T -RTS
-```
-
-## Words: the R&D laboratory
-
-The [words](https://github.com/tonyday567/words) project is where circuits-meter
-is exercised. It's a word-counting pipeline built as a `Loop` circuit with
-stopwatch markers at every stage — open file, read-and-count loop, close, format.
-The pipeline is the readme's running example.
-
-Three executables in words:
-
-- **`word`** — the full stopwatch pipeline (`readme`/stopwatch-pipelines example).
-- **`producer-consumer`** — open → readAll → close as explicit `Loop` stages, no
-  metering. The simplest complete circuit.
-- **`perf-bench`** (in circuits-meter) — benchmarks the measurement machinery
-  itself: clock overhead, IORef vs trace-delim, meterAction overhead, and
-  simultaneous time+space via `both`.
-
-## Runners in the repo
-
-- **`nub`** — `Data.List.nub` as a quadratic reference shape. Times nub, Set-nub,
-  and sort-nub against input sizes, fits a quadratic model, and reports R². The
-  point is to exercise `ticks`, not to win a benchmark.
-
-## Custom meters
+## Repeated measurement
 
 ```haskell
 import Circuit.Meter
-import Control.Arrow (Kleisli (..))
 
-myMeter :: Meter (Kleisli IO) State Reading
-myMeter = mkMeter captureState observeState
+result <- oneShot (count (+ 1)) (41 :: Int)
+-- (1,42)
 
-metered :: Loop t (Kleisli IO) a (Reading, b)
-metered = meterAction myMeter myArrow
+samples <- nShot 1000 (timeIO action) input
+-- Maybe ([Nanos], b)
 ```
 
-`meterAction` is tensor-agnostic — it only needs `Category` + `Strong` from the
-base arrow, so the result lifts into pipelines using `(,)` or `Either` without
-changing the combinator.
+`oneShot` is `init → emit`. Positive `nShot n` is `init → commit × (n−1) → emit`, using the same input without allocating an input tape. Non-positive counts return `Nothing` without running any leg.
 
-## What's not here
+`observe` retains chronological observations and only the latest payload result. `named` and `namedN` accumulate projected statistics under a key, latest first. `converge` accepts varying inputs, checks the channel after every init/commit, and counts init as iteration one.
 
-Heavy micro-benchmark harnesses (`baseline`, `alloc-probe`) moved to
-[perf-circuits](https://github.com/tonyday567/perf-circuits). This repo is the
-public metering library plus the `perf-bench` and `nub` runners.
+## Time and space
+
+- `time` measures a pure function and forces its result to WHNF.
+- `timeIO` measures an IO action; use it to choose lazy, WHNF, or NF evaluation explicitly.
+- `spaceIO` samples the RTS allocation counter and requires `+RTS -T`.
+- `timeSpaceIO` measures both around the same action and also requires `+RTS -T`.
+
+Timing is continuous: the previous ending stamp begins the next interval. This uses n+1 clock reads for n inputs; samples after the first include runner work between commits. Allocation samples are raw RTS counter deltas, not guaranteed isolated workload totals.
+
+For NF measurement:
+
+```haskell
+nShot runs (timeIO (evaluate . force . f)) input
+```
+
+## Pipeline measurement
+
+Pipeline markers observe stages inside one actual execution. The canonical example is `example-words` in `circuits-examples`:
+
+```haskell
+wordPipeline =
+  start clock
+    .> carryT openf
+    .> lap clock "opened"
+    .> carryT readAndCount
+    .> carry forceMap
+    .> lap clock "read"
+    .> carry post
+    .> lap clock "closed"
+    .> carryT formatfForced
+    .> lap clock "format"
+    .> stop clock "total"
+```
+
+`carry` lifts a `K` stage while passing measurement state through. `carryT` lifts a `FreeTrace` stage. `laps` returns every label's samples oldest first; `lapsFor` selects one label.
+
+`stop` measures the enclosing interval directly from `start`. It does not sum the laps, so marker and restart gaps remain enclosed. `clock`, `allocation`, and `timeSpace` supply interval instruments for these markers.
+
+Words also compares separate lazy stages, separately forced stages, and a fused stage. The labels expose where laziness moves work and how forcing boundaries affect fusion.
+
+## Build and run
+
+```bash
+cd ~/haskell/circuits-meter
+cabal build all
+cabal run circuits-meter-axioma
+
+cd ~/haskell/circuits-examples
+cabal run example-words
+
+cd ~/machina/circuits-meter-machina
+cabal run perf-explore -- sum --algorithm sumFuse --runs 1000 --warmup 1000 --nocheck
+```
+
+Use compiled optimised executables for performance claims; GHCi timing is not benchmark evidence. Allocation measurement needs `-rtsopts` at build time and `+RTS -T` at run time.
