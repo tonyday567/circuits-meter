@@ -4,9 +4,8 @@
 module Main where
 
 import Circuit.Category (K (..), (.>))
-import Circuit.Machine (Body (..), Moore, MooreT (..), fold, foldProcess, fuse, scan, scanProcess, scanT)
+import Circuit.Machine (Body (..), Moore, MooreT (..), Step (..), fold, foldProcess, fuse, scan, scanProcess, scanT)
 import Circuit.Meter
-import Circuit.Machine (Step (..))
 import Circuit.Syntax (eval)
 import Circuit.Tensor (Const (..), unConst)
 import Control.Exception (evaluate)
