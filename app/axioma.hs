@@ -4,10 +4,11 @@
 module Main where
 
 import Circuit.Category (K (..), (.>))
-import Circuit.Machine (Body (..))
+import Circuit.Machine (Body (..), Moore, MooreT (..), fold, foldProcess, fuse, scan, scanProcess, scanT)
 import Circuit.Meter
+import Circuit.Machine (Step (..))
 import Circuit.Syntax (eval)
-import Circuit.Tensor (Const (..))
+import Circuit.Tensor (Const (..), unConst)
 import Control.Exception (evaluate)
 import Data.IORef
 import Data.Map.Strict qualified as Map
@@ -197,8 +198,34 @@ v12 = do
   actual <- readIORef calls
   checkEqual "V12: warmup kinds stay separate and payload counts are exact" 3 actual
 
+-- | The smallest public machine surface, exercised on one pure sum body: the
+-- visible and sealed runners, both folds, the fused tick, and prefix demand.
+-- V1/V2 above remain the nShot half of the same surface.
+machineSurface :: IO ()
+machineSurface = do
+  let body = Body id (uncurry (+)) Const :: Moore (,) Int (->) Int Int
+      sealed = MooreT body
+      tape = [1, 2, 3, 4] :: [Int]
+  checkEqual
+    "V13: empty and finite runners agree on the visible and sealed paths"
+    ([], [], [], [1, 3, 6, 10], [1, 3, 6, 10], [1, 3, 6, 10])
+    (scanProcess body [], scan sealed [], scanT sealed [], scanProcess body tape, scan sealed tape, scanT sealed tape)
+  checkEqual
+    "V13: folds keep the final post-commit value and nothing on an empty tape"
+    (Nothing, Just 10, Nothing, Just 10)
+    (foldProcess body [], foldProcess body tape, fold sealed [], fold sealed tape)
+  checkEqual
+    "V13: a three-element prefix of a longer tape demands only its prefix"
+    [1, 3, 6]
+    (take 3 (scanProcess body (1 : 2 : 3 : error "tape over-demand")))
+  let Step f = fuse body
+  checkEqual
+    "V13: the fused tick commits and emits in one arrow"
+    7
+    (unConst (f (3, 4)))
+
 main :: IO ()
 main = do
   putStrLn "circuits-meter-axioma"
-  mapM_ (\v -> v >> putStrLn "") [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12]
-  putStrLn "All 12 meter witnesses passed."
+  mapM_ (\v -> v >> putStrLn "") [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, machineSurface]
+  putStrLn "All 13 meter witnesses passed."
